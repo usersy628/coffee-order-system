@@ -1,0 +1,28 @@
+HELP.md
+.gradle/
+build/
+!gradle/wrapper/gradle-wrapper.jar
+!**/src/main/**/build/
+!**/src/test/**/build/
+
+### IntelliJ IDEA ###
+.idea/
+*.iws
+*.iml
+*.ipr
+out/
+
+### Visual Studio Code ###
+.vscode/
+
+### OS ###
+.DS_Store
+Thumbs.db
+
+### Environment ###
+.env
+*.log
+
+### Codex workspace ###
+work/
+outputs/
