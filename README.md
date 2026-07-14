@@ -2,7 +2,7 @@
 
 다중 서버 환경에서 동시성, 데이터 일관성, 장애 복구를 고려하는 커피 주문 시스템 과제입니다.
 
-현재는 요구사항 분석, ERD 설계와 API 명세를 완료한 단계이며, Spring Boot 코드는 이후 단계에서 구현합니다.
+현재는 요구사항 분석, ERD, API 명세와 동시성·트랜잭션·Outbox 상세 전략을 완료한 단계이며, Spring Boot 코드는 이후 단계에서 구현합니다.
 
 ## 설계 목표와 의도
 
@@ -61,7 +61,8 @@
 - 같은 키와 다른 요청이면 `409 Conflict`와 `IDEMPOTENCY_KEY_REUSED` 오류를 반환합니다.
 - 같은 사용자의 주문과 충전은 모두 지갑 행을 먼저 잠근 뒤 멱등 결과를 다시 확인하여 사용자별로 직렬화합니다.
 - 유니크 제약 충돌이 발생하면 예외가 난 트랜잭션에서 조회를 계속하지 않고 전체 롤백 후 새 읽기 전용 트랜잭션에서 기존 결과를 조회합니다.
-- 주문과 충전의 멱등 키는 각 도메인 테이블에 영구 보관하므로 클라이언트는 매 요청에 새 UUID를 사용하고 과거 키를 재사용하지 않습니다. 실패 결과나 처리 중 상태, 키 만료까지 저장해야 한다면 별도 멱등성 테이블로 확장합니다.
+- 멱등 키의 범위는 `사용자 + API 작업 종류`입니다. 충전과 주문은 서로 다른 테이블에 저장하므로 문자열이 우연히 같아도 서로 충돌하지 않지만, 클라이언트는 모든 변경 요청에 새 UUID를 사용합니다.
+- 주문과 충전의 멱등 키는 각 도메인 테이블에 영구 보관합니다. 실패 결과나 처리 중 상태, 키 만료까지 저장해야 한다면 별도 멱등성 테이블로 확장합니다.
 
 ### 외부 데이터 플랫폼
 
@@ -92,10 +93,12 @@
 - 실제 운영 서비스에서는 경로 값만 신뢰하지 않고 인증 principal의 사용자 ID와 대조하여 다른 사용자의 자원에 접근하지 못하게 해야 합니다.
 - `{userId}`는 1 이상의 정수여야 하며 형식이 잘못되면 `400 Bad Request`와 `INVALID_USER_ID`를 반환합니다.
 - 요청과 응답은 `application/json`이며 JSON 필드명은 `camelCase`를 사용합니다.
+- JSON 문법을 해석할 수 없으면 `400 MALFORMED_JSON`, JSON 변경 API에 지원하지 않는 `Content-Type`을 보내면 `415 UNSUPPORTED_MEDIA_TYPE`을 반환합니다.
 - ID, 수량과 금액은 JSON 정수로 표현합니다. 금액 단위는 원이자 포인트입니다. 공개 웹 API로 확장되어 `BIGINT` ID가 JavaScript 안전 정수 범위를 넘을 수 있다면 ID 문자열 반환을 검토합니다.
 - 성공 응답은 공통 래퍼 없이 각 API의 결과를 직접 반환합니다.
 - API 시간은 ISO 8601 형식과 한국시간 오프셋을 포함하여 `2026-07-14T15:30:00+09:00`처럼 반환합니다.
 - 서버 내부와 DB에는 동일한 시각을 UTC로 저장하고 API 경계에서 `Asia/Seoul`로 변환합니다.
+- `Idempotency-Replayed`는 이 API에서 정의한 사용자 지정 응답 헤더입니다. 최초 반영은 `false`, 기존 결과 재현은 `true`이며 이를 모르는 클라이언트도 응답 본문을 정상적으로 처리할 수 있어야 합니다.
 
 공통 오류 응답은 다음 형식을 사용합니다. 클라이언트 분기는 번역될 수 있는 `message`가 아니라 `code`를 사용합니다. `details`는 필드 오류처럼 추가 정보가 있을 때 사용하고, 없으면 빈 객체를 반환하며 `traceId`는 서버 로그와 요청을 연결하는 식별자입니다.
 
@@ -110,6 +113,8 @@
   "traceId": "0af7651916cd43dd8448eb211c80319c"
 }
 ```
+
+현재 과제에서는 도메인 오류 코드가 간단히 드러나는 자체 형식을 사용합니다. 외부 공개 API 간 표준 상호운용성이 중요해지면 [RFC 9457](https://www.rfc-editor.org/rfc/rfc9457.html)의 `application/problem+json` 형식으로 확장할 수 있습니다. 오류 응답과 로그에는 토큰, 비밀번호와 내부 스택 트레이스 같은 민감정보를 포함하지 않습니다.
 
 ### API 목록
 
@@ -145,6 +150,12 @@ GET /api/menus
     "name": "카페라테",
     "price": 5000,
     "status": "ON_SALE"
+  },
+  {
+    "menuId": 3,
+    "name": "디카페인 아메리카노",
+    "price": 5000,
+    "status": "STOPPED"
   }
 ]
 ```
@@ -189,6 +200,7 @@ Idempotency-Key: f64e1530-e93b-40ce-a6e6-886d89d5fbbc
 | 사용자 없음 | `404` | `USER_NOT_FOUND` |
 | 충전 후 총잔액 한도 초과 | `409` | `POINT_LIMIT_EXCEEDED` |
 | 같은 멱등 키와 다른 금액 | `409` | `IDEMPOTENCY_KEY_REUSED` |
+| DB 락·데드락 재시도 소진 | `503` | `CONCURRENT_REQUEST_TIMEOUT` |
 
 ### 여러 메뉴 주문 및 포인트 결제
 
@@ -244,7 +256,7 @@ Idempotency-Key: 3f83e46e-29ae-4bab-93da-c06c4396e012
 }
 ```
 
-같은 키와 같은 정규화 요청을 다시 보내면 새 주문이나 포인트 차감 없이 `200 OK`, `Idempotency-Replayed: true`와 기존 주문 응답을 반환합니다. 동시에 도착한 같은 요청도 선행 트랜잭션이 완료된 뒤 같은 규칙을 적용합니다. 별도의 `PROCESSING` 응답은 사용하지 않습니다.
+같은 키와 같은 정규화 요청을 다시 보내면 새 주문이나 포인트 차감 없이 `200 OK`, `Idempotency-Replayed: true`와 기존 주문 응답을 반환합니다. 재현 응답의 `balanceAfter`는 현재 지갑이 아니라 해당 주문의 `USE point_history.balance_after`, `paidAt`은 `orders.paid_at`, 항목은 `order_item` 스냅샷에서 복원합니다. 동시에 도착한 같은 요청도 선행 트랜잭션이 완료된 뒤 같은 규칙을 적용합니다. 별도의 `PROCESSING` 응답은 사용하지 않습니다.
 
 | 조건 | HTTP 상태 | 오류 코드 |
 | --- | --- | --- |
@@ -257,6 +269,7 @@ Idempotency-Key: 3f83e46e-29ae-4bab-93da-c06c4396e012
 | 판매 중지 메뉴 포함 | `409` | `MENU_NOT_ON_SALE` |
 | 포인트 부족 | `409` | `INSUFFICIENT_POINTS` |
 | 같은 멱등 키와 다른 요청 | `409` | `IDEMPOTENCY_KEY_REUSED` |
+| DB 락·데드락 재시도 소진 | `503` | `CONCURRENT_REQUEST_TIMEOUT` |
 
 ### 최근 168시간 인기 메뉴 TOP 3 조회
 
@@ -289,6 +302,26 @@ GET /api/menus/popular
 
 조회 시각 `T`를 한 번 얻어 `[T - 168시간, T)`를 집계하고 `from`과 `to`에도 같은 경계를 사용합니다. 메뉴명은 현재 메뉴명을 반환하며, 메뉴별 판매 수량 내림차순과 메뉴 ID 오름차순으로 순위를 결정합니다. 집계 결과가 없으면 `items`를 빈 배열로 반환합니다.
 
+초기 구현은 다음 직접 집계 쿼리를 사용합니다.
+
+```sql
+SELECT oi.menu_id,
+       m.name AS menu_name,
+       SUM(oi.quantity) AS total_quantity
+FROM orders o
+JOIN order_item oi ON oi.order_id = o.id
+JOIN menu m ON m.id = oi.menu_id
+WHERE o.paid_at >= :from_utc
+  AND o.paid_at < :to_utc
+GROUP BY oi.menu_id, m.name
+ORDER BY total_quantity DESC, oi.menu_id ASC
+LIMIT 3;
+```
+
+현재 `orders`는 `CHECK (status = 'PAID')`이므로 쿼리에서 상태 조건을 생략합니다. 주문 상태가 확장되면 `WHERE status = 'PAID'`와 `(status, paid_at, id)` 인덱스를 함께 추가합니다.
+
+MySQL은 정수 컬럼의 `SUM()`도 `DECIMAL`로 반환할 수 있으므로 native query 결과는 `BigDecimal` 또는 `Number`로 받은 뒤 범위를 확인하여 `longValueExact()`로 변환합니다. 데이터와 호출량이 커져 직접 집계가 병목으로 확인될 때만 짧은 TTL 캐시, 집계 테이블 또는 스트리밍 사전 집계를 도입합니다.
+
 ## 동시성 및 트랜잭션 상세 전략
 
 포인트 잔액을 변경하는 충전과 주문은 모두 같은 `point_wallet` 행을 직렬화 지점으로 사용합니다. 애플리케이션의 사전 조회는 빠른 재응답을 위한 최적화일 뿐이며, 지갑 락 획득 후 멱등 결과를 반드시 다시 확인합니다.
@@ -303,17 +336,22 @@ sequenceDiagram
 
     C->>A: 충전 요청 + Idempotency-Key
     A->>A: 입력 검증 및 요청 해시 계산
-    A->>DB: 기존 CHARGE 이력 선조회
-    alt 이미 완료된 같은 요청
+    A->>DB: 기존 CHARGE 이력과 요청 해시 선조회
+    alt 같은 키와 같은 해시
         DB-->>A: 기존 이력
         A-->>C: 200, Replayed=true
+    else 같은 키와 다른 해시
+        A-->>C: 409, IDEMPOTENCY_KEY_REUSED
     else 처리 필요
         A->>DB: BEGIN
         A->>DB: point_wallet SELECT FOR UPDATE
-        A->>DB: 멱등 CHARGE 이력 재조회
-        alt 락 대기 중 선행 요청 완료
+        A->>DB: CHARGE 이력 SELECT FOR UPDATE 재조회
+        alt 같은 키와 같은 해시
             A->>DB: ROLLBACK
             A-->>C: 200, Replayed=true
+        else 같은 키와 다른 해시
+            A->>DB: ROLLBACK
+            A-->>C: 409, IDEMPOTENCY_KEY_REUSED
         else 새 충전
             A->>DB: 한도 검증, 지갑 증가, CHARGE 이력 저장
             A->>DB: COMMIT
@@ -328,7 +366,7 @@ sequenceDiagram
 2. 커밋된 기존 주문을 선조회하여 같은 요청이면 빠르게 재응답합니다.
 3. 트랜잭션에서 메뉴 존재 여부와 판매 상태를 확인하고 DB 가격으로 총액을 계산합니다. 현재 과제에서는 메뉴 관리가 없어 메뉴 행 락을 추가하지 않습니다.
 4. `point_wallet`을 `SELECT ... FOR UPDATE`로 잠급니다.
-5. 지갑 락을 획득한 뒤 `(user_id, idempotency_key)`를 다시 조회합니다. 대기 중 선행 주문이 커밋되었다면 현재 트랜잭션을 종료하고 그 결과를 반환합니다.
+5. 지갑 락을 획득한 뒤 `(user_id, idempotency_key)`를 `SELECT ... FOR UPDATE` current read로 다시 조회합니다. MySQL `REPEATABLE READ`의 이전 스냅샷이 아니라 락 대기 중 커밋된 최신 행을 확인합니다. 선행 주문이 커밋되었다면 현재 트랜잭션을 종료하고 요청 해시에 따라 재현 또는 `409`를 반환합니다.
 6. 잔액을 검증한 뒤 주문, 주문 항목, 지갑 차감, `USE` 이력과 Outbox 이벤트를 저장하고 한 번에 커밋합니다.
 7. 유니크 충돌은 전체 롤백하고 새 읽기 전용 트랜잭션에서 요청 해시를 비교합니다. 충돌 예외가 발생한 트랜잭션을 재사용하지 않습니다.
 
@@ -338,6 +376,7 @@ sequenceDiagram
 
 - 모든 잔액 변경 경로는 `point_wallet`을 먼저 잠근 뒤 주문 또는 충전 멱등 데이터를 생성합니다. 같은 자원을 서로 다른 순서로 잠그지 않습니다.
 - 트랜잭션 안에서는 DB 작업만 수행하고 외부 HTTP 호출, 대기와 긴 계산을 하지 않습니다.
+- 초기 설정은 지갑 락 대기 2초, 명령 트랜잭션 timeout 5초로 두고 부하 테스트 결과에 따라 조정합니다.
 - 데드락 또는 락 획득 타임아웃은 비즈니스 실패가 아니라 일시적인 인프라 충돌로 분류합니다.
 - 재시도는 실패한 SQL 한 문장이 아니라 트랜잭션 경계 밖에서 전체 명령을 새 트랜잭션으로 수행합니다.
 - 최초 시도 후 최대 2회 재시도하며 50ms, 100ms 기준 지수 백오프와 ±20% jitter를 적용합니다. 이 값은 설정으로 분리합니다.
@@ -426,6 +465,8 @@ erDiagram
         INT last_http_status
         DATETIME published_at
         DATETIME failed_at
+        DATETIME resolved_at
+        VARCHAR resolution_note
         TEXT last_error
         DATETIME created_at
     }
@@ -472,6 +513,17 @@ erDiagram
 
 - `CHARGE`이면 `amount > 0`, `order_id IS NULL`, `idempotency_key IS NOT NULL`, `request_hash IS NOT NULL`이어야 합니다.
 - `USE`이면 `amount < 0`, `order_id IS NOT NULL`, `idempotency_key IS NULL`, `request_hash IS NULL`이어야 합니다.
+- 위 `type`, `amount`, `order_id`, `idempotency_key`, `request_hash` 조합은 설명에만 의존하지 않고 두 유효 조합 중 하나만 허용하는 단일 DB `CHECK`로 강제합니다.
+
+```sql
+CHECK (
+    (type = 'CHARGE' AND amount > 0 AND order_id IS NULL
+        AND idempotency_key IS NOT NULL AND request_hash IS NOT NULL)
+ OR (type = 'USE' AND amount < 0 AND order_id IS NOT NULL
+        AND idempotency_key IS NULL AND request_hash IS NULL)
+)
+```
+
 - `CHECK (balance_after BETWEEN 0 AND 300000)`을 적용합니다.
 - `UNIQUE (order_id)`로 한 주문에 포인트 사용 이력이 중복 생성되는 것을 방지합니다. MySQL 유니크 인덱스는 여러 `NULL`을 허용하므로 충전 이력에는 영향을 주지 않습니다.
 - `UNIQUE (user_id, idempotency_key)`로 충전 재요청의 중복 반영을 방지합니다. `USE` 이력의 `NULL`에는 영향을 주지 않습니다.
@@ -545,13 +597,15 @@ erDiagram
 | `status` | `VARCHAR(20)` | NOT NULL | `PENDING`, `PROCESSING`, `PUBLISHED`, `FAILED` |
 | `attempt_count` | `INT` | NOT NULL, DEFAULT 0 | 선점되어 전송 단계에 진입한 횟수 |
 | `redrive_count` | `INT` | NOT NULL, DEFAULT 0 | 운영자 재처리 횟수 |
-| `next_attempt_at` | `DATETIME(6)` | NOT NULL | 다음 재시도 가능 시각 |
+| `next_attempt_at` | `DATETIME(6)` | NULL 허용 | `PENDING`의 다음 재시도 가능 시각 |
 | `locked_by` | `VARCHAR(100)` | NULL 허용 | 선점한 게시자 인스턴스 식별자 |
 | `locked_at` | `DATETIME(6)` | NULL 허용 | 선점 시각 |
 | `claim_token` | `CHAR(36)` | NULL 허용 | 선점마다 새로 발급하는 fencing UUID |
 | `last_http_status` | `SMALLINT UNSIGNED` | NULL 허용 | 마지막 외부 HTTP 상태 |
 | `published_at` | `DATETIME(6)` | NULL 허용 | 전송 완료 시각 |
 | `failed_at` | `DATETIME(6)` | NULL 허용 | 최종 실패 전환 시각 |
+| `resolved_at` | `DATETIME(6)` | NULL 허용 | 운영자가 영구 실패를 확인한 시각 |
+| `resolution_note` | `VARCHAR(500)` | NULL 허용 | 민감정보를 제외한 확인 사유 |
 | `last_error` | `TEXT` | NULL 허용 | 마지막 실패 원인 |
 | `created_at` | `DATETIME(6)` | NOT NULL | 이벤트 생성 시각 |
 
@@ -562,8 +616,10 @@ erDiagram
 - `CHECK (redrive_count >= 0)`
 - `CHECK (schema_version >= 1)`
 - `CHECK (last_http_status IS NULL OR last_http_status BETWEEN 100 AND 599)`
+- `PENDING`이면 `attempt_count < 6`, `next_attempt_at IS NOT NULL`이어야 하며 claim 정보가 없어야 합니다.
 - `PROCESSING`이면 `locked_by`, `locked_at`, `claim_token`이 모두 존재해야 합니다.
-- `PUBLISHED`이면 `published_at`, `FAILED`이면 `failed_at`이 존재해야 합니다.
+- `PUBLISHED`이면 `published_at`, `FAILED`이면 `failed_at`이 존재해야 하며 두 terminal 상태에는 `next_attempt_at`과 claim 정보가 없어야 합니다.
+- `resolved_at`은 `FAILED`에서만 사용할 수 있고 값이 있으면 `resolution_note`도 존재해야 합니다.
 - `FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE RESTRICT`
 
 `UNIQUE (order_id, event_type)`은 현재 주문마다 `ORDER_COMPLETED` 이벤트가 하나뿐이라는 정책에 맞습니다. 향후 같은 주문에서 동일 타입의 이벤트를 여러 번 발행해야 한다면 aggregate version을 추가하고 이 제약을 확장합니다.
@@ -587,6 +643,13 @@ erDiagram
         "unitPrice": 4500,
         "quantity": 2,
         "lineAmount": 9000
+      },
+      {
+        "menuId": 2,
+        "menuName": "카페라테",
+        "unitPrice": 5000,
+        "quantity": 1,
+        "lineAmount": 5000
       }
     ]
   }
@@ -599,13 +662,14 @@ erDiagram
 SELECT id
 FROM order_event_outbox
 WHERE status = 'PENDING'
+  AND attempt_count < 6
   AND next_attempt_at <= UTC_TIMESTAMP(6)
 ORDER BY created_at, id
-LIMIT :batch_size
+LIMIT :claim_limit
 FOR UPDATE SKIP LOCKED;
 ```
 
-선점 트랜잭션에서 `PROCESSING`으로 변경하고 `attempt_count`를 1 증가시키며 `locked_by`, `locked_at`과 매번 새로운 `claim_token`을 기록합니다. 이 시점의 attempt는 네트워크 호출 완료가 아니라 전송 단계에 진입한 횟수를 의미합니다. 트랜잭션을 커밋한 후에만 외부 API를 호출합니다.
+`:claim_limit`은 설정된 배치 크기와 현재 즉시 실행 가능한 worker 슬롯 수 중 작은 값입니다. 선점 트랜잭션에서 `PROCESSING`으로 변경하고 `attempt_count`를 1 증가시키며 `next_attempt_at`을 비우고 `locked_by`, `locked_at`과 매번 새로운 `claim_token`을 기록합니다. 이 시점의 attempt는 네트워크 호출 완료가 아니라 전송 단계에 진입한 횟수이며, 프로세스가 호출 직전에 종료되어도 보수적으로 retry budget을 소비합니다. 트랜잭션을 커밋한 후에만 외부 API를 호출합니다.
 
 외부 플랫폼이 이벤트를 수신한 직후 게시자가 종료되면 같은 이벤트가 다시 전송될 수 있습니다. 따라서 게시자는 매번 같은 `event_id`를 사용하고, 외부 API가 멱등 헤더를 지원하면 같은 값을 `Idempotency-Key`로 전달합니다. Mock API 테스트에서도 소비자의 중복 제거를 검증합니다.
 
@@ -616,14 +680,15 @@ stateDiagram-v2
     [*] --> PENDING: 주문과 함께 저장
     PENDING --> PROCESSING: claim + attempt_count 증가
     PROCESSING --> PUBLISHED: 2xx 또는 확인된 중복 성공
-    PROCESSING --> PENDING: 재시도 가능 실패
-    PROCESSING --> PENDING: lease 만료 회수
-    PROCESSING --> FAILED: 영구 실패 또는 6회 소진
+    PROCESSING --> PENDING: 재시도 가능 실패, attempt_count < 6
+    PROCESSING --> PENDING: lease 만료, attempt_count < 6
+    PROCESSING --> FAILED: lease 만료, attempt_count = 6
+    PROCESSING --> FAILED: 영구 실패 또는 attempt_count = 6
     FAILED --> PENDING: 운영자 redrive
     PUBLISHED --> [*]: 보관 기간 후 삭제
 ```
 
-lease timeout은 기본 30초이며 connect timeout 1초와 read timeout 3초보다 충분히 길게 둡니다. 만료된 `PROCESSING` 이벤트는 짧은 트랜잭션에서 `PENDING`으로 회수하고 기존 claim 정보를 지웁니다. 회수된 이벤트를 다른 게시자가 선점하면 반드시 새로운 `claim_token`을 발급합니다.
+lease timeout은 기본 30초이며 전체 HTTP call deadline 5초보다 충분히 길게 둡니다. 만료된 `PROCESSING` 이벤트는 `status = 'PROCESSING' AND locked_at < :lease_expired_at` 조건으로 원자적으로 회수합니다. `attempt_count < 6`이면 `PENDING`과 현재 UTC의 `next_attempt_at`으로 바꾸고, 6이면 `FAILED`와 `failed_at`을 기록합니다. 두 경우 모두 기존 claim 정보를 지웁니다. 회수된 이벤트를 다른 게시자가 선점하면 반드시 새로운 `claim_token`을 발급합니다.
 
 늦게 끝난 이전 게시자가 새 게시자의 결과를 덮어쓰지 못하도록 모든 완료·실패 갱신은 자신이 소유한 claim에만 허용합니다.
 
@@ -631,6 +696,10 @@ lease timeout은 기본 30초이며 connect timeout 1초와 read timeout 3초보
 UPDATE order_event_outbox
 SET status = 'PUBLISHED',
     published_at = UTC_TIMESTAMP(6),
+    next_attempt_at = NULL,
+    last_http_status = :success_status,
+    last_error = NULL,
+    failed_at = NULL,
     claim_token = NULL,
     locked_by = NULL,
     locked_at = NULL
@@ -639,7 +708,7 @@ WHERE id = :id
   AND claim_token = :claim_token;
 ```
 
-영향받은 행이 0개면 lease가 만료되어 소유권을 잃은 것이므로 이전 게시자는 상태를 더 변경하지 않습니다.
+영향받은 행이 0개면 lease가 만료되어 소유권을 잃은 것이므로 이전 게시자는 상태를 더 변경하지 않습니다. `PROCESSING`에서 재시도용 `PENDING` 또는 `FAILED`로 변경할 때도 동일한 `id`, `status`, `claim_token` 조건을 사용합니다. 재시도 전환은 다음 `next_attempt_at`을 기록하고 `failed_at`과 claim 정보를 지우며, 최종 실패 전환은 `next_attempt_at`을 지우고 `failed_at`과 마지막 오류를 기록한 뒤 claim 정보를 지웁니다.
 
 ### 외부 응답 분류와 재시도
 
@@ -654,29 +723,46 @@ WHERE id = :id
 | `400`, `404`, `422` | payload 또는 계약 오류로 `FAILED` |
 | `409` 및 그 밖의 `4xx` | 외부 오류 코드를 확인하여 중복 성공, 재시도 또는 영구 실패로 분류 |
 
-- 최초 시도는 즉시 수행하고 실패 후 1초, 2초, 4초, 8초, 16초 기준 지수 백오프에 ±20% jitter를 적용합니다. 최대 지연은 기본 30초이며 모두 설정으로 분리합니다.
+- 최초 시도는 즉시 수행하고 실패 후 1초, 2초, 4초, 8초, 16초 기준 지수 백오프에 ±20% jitter를 적용합니다. 내부 계산의 최대 지연은 기본 30초이며 모두 설정으로 분리합니다. `429 Retry-After`가 더 길면 외부 플랫폼이 지정한 시각을 우선합니다.
 - 6번째 시도까지 실패하면 `FAILED`, `failed_at`, `last_http_status`, `last_error`를 기록합니다.
-- 게시 주기는 기본 1초, 배치 크기는 100, 인스턴스별 동시 외부 호출 수는 10으로 시작하고 외부 플랫폼 rate limit과 부하 테스트 결과에 따라 조정합니다.
+- HTTP 클라이언트 내부 자동 재시도는 비활성화하여 Outbox의 attempt 계산과 중복되지 않게 합니다. DNS, connection pool 대기, TLS, connect와 read를 포함한 전체 call deadline은 기본 5초로 제한합니다.
+- 게시 주기는 기본 1초, 배치 크기와 인스턴스별 동시 외부 호출 수는 각각 10으로 시작합니다. 한 번에 선점하는 수는 즉시 실행 가능한 worker 슬롯 수를 초과하지 않습니다. 전체 외부 호출 동시성은 `인스턴스 수 × 인스턴스별 동시성`이므로 외부 플랫폼의 전체 rate limit에 맞춰 조정합니다.
 - 정상 종료 시 새 선점을 중단하고 진행 중 호출을 최대 10초 기다립니다. 끝나지 않은 claim은 상태를 억지로 덮어쓰지 않고 lease 회수에 맡깁니다.
 
 ### FAILED redrive, 보관과 관측
 
-redrive는 공개 API가 아닌 운영 명령으로 제공합니다. 원인을 해결한 뒤 `FAILED` 이벤트를 `PENDING`으로 바꾸고 `attempt_count`를 0으로 초기화하며 `redrive_count`를 증가시킵니다. `next_attempt_at`은 현재 UTC 시각으로 설정하고 claim과 `failed_at`을 지우되 직전 `last_error`는 감사 목적으로 다음 결과가 기록될 때까지 유지합니다.
+redrive는 공개 API가 아닌 운영 명령으로 제공합니다. 원인을 해결한 뒤 `FAILED` 이벤트를 `PENDING`으로 바꾸고 `attempt_count`를 0으로 초기화하며 `redrive_count`를 증가시킵니다. `next_attempt_at`은 현재 UTC 시각으로 설정하고 claim, `failed_at`, `resolved_at`, `resolution_note`를 지우되 직전 `last_error`는 감사 목적으로 다음 결과가 기록될 때까지 유지합니다.
 
 - `PUBLISHED` 이벤트는 기본 7일 보관 후 한 번에 최대 1,000건씩 삭제합니다.
-- `FAILED` 이벤트는 성공적으로 redrive되거나 운영자가 확인하기 전에는 자동 삭제하지 않습니다.
+- `FAILED` 이벤트는 성공적으로 redrive되거나 운영자가 확인하기 전에는 자동 삭제하지 않습니다. 재처리하지 않을 영구 실패는 운영자가 `resolved_at`, `resolution_note`를 기록하고, 확인 후 30일 동안 보관한 뒤 별도 감사 로그를 남기고 배치 삭제합니다.
 - 가장 오래된 `PENDING` 나이, 상태별 건수, 성공률, 재시도 횟수, lease 회수 횟수, redrive 횟수와 외부 응답 지연을 메트릭으로 수집합니다.
 - `FAILED` 발생, 가장 오래된 `PENDING` 나이 임계치 초과와 연속 인증 오류에 경보를 설정합니다.
 - Mock 소비자는 `eventId` 유니크 기록과 수집 데이터 반영을 한 트랜잭션으로 처리합니다. 같은 이벤트를 다시 받으면 데이터를 중복 반영하지 않고 이미 처리된 결과를 반환합니다.
+
+초기 운영 파라미터는 다음과 같으며 모두 외부 설정으로 분리합니다.
+
+| 항목 | 초기값 |
+| --- | --- |
+| 게시 주기 | 1초 |
+| 배치 크기 | 10 |
+| 인스턴스별 외부 호출 동시성 | 10 |
+| connect / read timeout | 1초 / 3초 |
+| 전체 HTTP call deadline | 5초 |
+| lease timeout | 30초 |
+| 최초 실패 후 최대 재시도 | 5회 |
+| 백오프 기준 | 1초, 2초, 4초, 8초, 16초 + ±20% jitter |
+| 최대 백오프 | 30초 |
+| `PUBLISHED` 보관 기간 | 7일 |
+| 확인된 `FAILED` 보관 기간 | 30일 |
+| 정리 배치 크기 | 1,000 |
 
 ## 인덱스
 
 | 테이블 | 인덱스 | 목적 |
 | --- | --- | --- |
 | `orders` | `UNIQUE (user_id, idempotency_key)` | 사용자별 멱등성 보장 |
-| `orders` | `INDEX (status, paid_at, id)` | 최근 168시간 결제 주문 범위 탐색 |
+| `orders` | `INDEX (paid_at, id)` | 현재 모든 주문이 `PAID`인 범위에서 최근 168시간 탐색 |
 | `order_item` | `UNIQUE (order_id, menu_id)` | 주문 내 메뉴 중복 방지 |
-| `order_item` | `INDEX (order_id, menu_id, quantity)` | 인기 메뉴 조인 및 수량 집계 |
 | `point_history` | `UNIQUE (order_id)` | 주문별 중복 차감 방지 |
 | `point_history` | `UNIQUE (user_id, idempotency_key)` | 사용자별 충전 멱등성 보장 |
 | `point_history` | `INDEX (user_id, created_at, id)` | 사용자 포인트 이력 조회 |
@@ -684,17 +770,23 @@ redrive는 공개 API가 아닌 운영 명령으로 제공합니다. 원인을 �
 | `order_event_outbox` | `UNIQUE (order_id, event_type)` | 주문 이벤트 중복 생성 방지 |
 | `order_event_outbox` | `INDEX (status, next_attempt_at, created_at, id)` | 전송 대상 배치 조회 |
 | `order_event_outbox` | `INDEX (status, locked_at)` | 만료된 `PROCESSING` 이벤트 회수 |
+| `order_event_outbox` | `INDEX (status, published_at, id)` | 보관 기간이 지난 `PUBLISHED` 정리 |
+| `order_event_outbox` | `INDEX (status, resolved_at, id)` | 확인 후 보관 기간이 지난 `FAILED` 정리 |
 
-실제 인덱스 사용 여부는 MySQL 실행 계획과 통합 테스트 데이터로 확인하고, 중복되거나 사용되지 않는 인덱스는 구현 단계에서 조정합니다.
+현재 `orders.status`는 항상 `PAID`이므로 선택도가 없는 `status`를 선두에 두지 않습니다. 취소 등 다른 상태가 추가되면 `(status, paid_at, id)`를 다시 검토합니다. `order_item`의 `(order_id, menu_id, quantity)` covering index는 기존 유니크 인덱스와 중복 비용이 있으므로 기본 생성하지 않고, 실제 집계 쿼리의 테이블 접근 비용이 병목일 때만 추가합니다.
+
+MySQL Testcontainers에 소량 데이터뿐 아니라 최근 168시간 주문이 충분히 포함된 테스트 데이터를 넣고 `EXPLAIN ANALYZE`로 범위 탐색 행 수, 조인 순서와 실제 실행 시간을 확인합니다. 사용되지 않거나 쓰기 비용만 늘리는 인덱스는 제거합니다.
 
 ## 시간 저장 기준
 
 - 애플리케이션에서는 `Instant`를 사용합니다.
 - DB에는 UTC 기준 `DATETIME(6)`으로 저장합니다.
 - JDBC와 Hibernate의 시간대도 UTC로 고정합니다.
-- 인기 메뉴 조회는 주입된 `Clock`에서 `T`를 한 번 얻고 `T - 168시간`과 `T`를 UTC 값으로 변환하여 쿼리에 전달합니다.
+- 영속화하거나 조회 경계로 사용하는 `Instant`는 `DATETIME(6)`과 맞도록 마이크로초 단위로 절삭합니다. API는 최대 6자리 소수 초를 표현하며 소수 부분이 0인 예시는 초까지만 표시할 수 있습니다.
+- 인기 메뉴 조회는 주입된 `Clock`에서 `T`를 한 번 얻고 마이크로초로 절삭한 뒤 `T - 168시간`과 `T`를 UTC 값으로 쿼리에 전달합니다. 응답의 `from`, `to`도 반드시 같은 두 값을 변환하여 사용합니다.
 - `Asia/Seoul`은 API 표현과 정책 설명의 기준으로 사용하되 DB 서버나 세션의 암묵적인 시간대 변환에는 의존하지 않습니다.
 - UTC 저장은 서버 위치와 세션 설정이 달라져도 주문, 로그와 Outbox 시각을 동일한 순간으로 비교하기 위한 선택입니다. 사용자에게 UTC를 노출하는 것이 아니라 API 경계에서 `Asia/Seoul`로 변환하여 `+09:00` 오프셋과 함께 반환합니다.
+- 외부 이벤트의 `occurredAt`은 UTC `Z` 형식으로 전송합니다. Outbox 선점, lease와 재시도 시각은 서버 인스턴스 시계 차이의 영향을 줄이기 위해 DB `UTC_TIMESTAMP(6)`를 기준으로 계산합니다.
 - 향후 한국 날짜 단위 집계가 필요하면 `Asia/Seoul`에서 시작과 종료 경계를 계산한 뒤 UTC로 변환하여 조회합니다.
 
 ## 문제 해결 전략 및 기술적 선택 이유
@@ -711,9 +803,37 @@ redrive는 공개 API가 아닌 운영 명령으로 제공합니다. 원인을 �
 | Outbox 다중 인스턴스 선점 | `FOR UPDATE SKIP LOCKED`, 짧은 선점 트랜잭션, `claim_token` fencing | 분산 락, 인스턴스별 고정 파티션 | 별도 인프라 없이 여러 게시자가 잠긴 행을 건너뛰며 병렬 처리하고 늦게 끝난 작업자의 상태 덮어쓰기를 막습니다. | DB 지원 여부에 의존하며 lease 회수, timeout과 claim 소유권 조건을 함께 관리해야 합니다. |
 | 금액 타입 | Java `long`, MySQL `BIGINT` | `int`, 소수 타입 | 정수 포인트 정책에 맞고 합계 계산의 오버플로 여유와 도메인 타입 일관성을 확보합니다. | 현재 한도보다 넓은 타입이지만 DB `CHECK`와 애플리케이션 검증으로 정책 범위를 제한합니다. |
 | 주문 가격 보존 | `order_item`에 메뉴명과 가격 스냅샷 저장 | 조회 시 현재 `menu`만 조인 | 메뉴 정보가 바뀌어도 주문 당시 금액과 표시 내용을 재현할 수 있습니다. | 데이터가 중복되지만 주문 이력의 불변성과 추적 가능성을 우선합니다. |
-| 시간 저장과 표현 | 내부·DB UTC, API `Asia/Seoul` | DB에 한국시간 직접 저장 | 동일한 순간을 명확하게 비교하면서 한국 사용자에게 자연스러운 시간을 제공합니다. | API 경계 변환이 필요하므로 공통 직렬화 설정과 시간 경계 테스트를 둡니다. |
+| 시간 저장과 표현 | 내부·DB UTC, API `Asia/Seoul`, 마이크로초 정밀도 | DB에 한국시간 직접 저장 | 동일한 순간을 명확하게 비교하면서 한국 사용자에게 자연스러운 시간을 제공하고 `DATETIME(6)`과 비교 정밀도를 맞춥니다. | API 경계 변환과 절삭이 필요하므로 공통 직렬화 설정과 시간 경계 테스트를 둡니다. |
 | 현재 시각 취득 | `Clock` 주입 | 서비스 내부에서 `Instant.now()` 직접 호출 | 최근 168시간 경계를 테스트에서 고정하여 시작 포함·종료 제외 조건을 재현할 수 있습니다. | 생성자 의존성이 하나 늘지만 테스트 결정성을 얻습니다. |
 | API 경로 | `/api` 사용 | `/api/v1` URL 버전 | 현재 단일 과제 API를 간결하게 표현합니다. | 향후 호환되지 않는 변경이 생기면 별도 버전 전략이 필요합니다. |
+| 오류 응답 | `code`, `message`, `details`, `traceId` | RFC 9457 Problem Details | 과제에서 도메인 오류 코드를 간단히 드러내고 로그 추적성을 확보합니다. | 외부 상호운용성이 중요해지면 `application/problem+json`으로 확장합니다. |
+| 인기 메뉴 조회 | 168시간 직접 SQL 집계 | 캐시, 집계 테이블, 스트리밍 집계 | 현재 데이터 규모에서는 가장 단순하고 원본 주문과 즉시 일치합니다. | `EXPLAIN ANALYZE`와 부하 테스트에서 병목이 확인된 뒤에만 사전 집계를 도입합니다. |
+
+## 테스트 전략
+
+설계의 정합성은 H2 대체 DB가 아니라 실제 MySQL Testcontainers 기반 통합 테스트로 검증합니다. 단위 테스트는 순수 도메인 규칙과 시간·해시 계산에 집중합니다.
+
+| 범위 | 필수 시나리오 |
+| --- | --- |
+| 충전 검증 | 0·음수·300,000 초과 거절, 충전 후 총잔액 한도, 정확히 300,000 허용 |
+| 충전 멱등성 | 같은 키·같은 금액 재현, 같은 키·다른 금액 409, 동시 중복 충전 한 번만 반영 |
+| 멱등 응답 계약 | 최초 응답의 `Idempotency-Replayed: false`, 기존 결과의 `true`, 최초 `balance`·`balanceAfter`와 시각 재현 |
+| 주문 원자성 | 주문·항목·차감·이력·Outbox 중 하나의 저장 실패 시 전체 롤백 |
+| 주문 멱등성 | 메뉴 순서가 다른 동일 요청 재현, 다른 요청 409, 응답 유실 후 재요청, 동시 중복 요청 한 번만 차감 |
+| 포인트 동시성 | 동일 사용자 충전·주문 100개, 서로 다른 사용자 병렬 처리, 잔액 음수 및 한도 초과 없음 |
+| DB 장애 처리 | 강제 데드락과 락 timeout 전체 트랜잭션 재시도, 재시도 소진 시 503 |
+| API 오류 계약 | malformed JSON 400, 미지원 Content-Type 415, `code`·`message`·`details`·`traceId`, 락 재시도 소진 503 |
+| Outbox 원자성 | 주문 롤백 시 이벤트 없음, 주문 성공 시 정확히 하나 생성 |
+| Outbox 선점 | 게시자 두 개의 중복 선점 방지, worker 슬롯 이하 claim, lease 만료 회수, 이전 `claim_token`의 모든 상태 갱신 실패 |
+| 외부 전송 | 2xx 성공, timeout·5xx·408·425·429 재시도, `Retry-After`, terminal 4xx, 인증 오류 경보 |
+| 중복 소비 | 외부 수신 직후 게시자 종료를 재현하고 같은 `eventId` 재전송 시 Mock 데이터 한 번만 반영 |
+| Outbox 운영 | 6번째 claim 중단·6회 전송 실패 후 `FAILED`, redrive 성공, `PUBLISHED` 및 확인된 `FAILED` 정리와 신규 게시 간 충돌 없음 |
+| 인기 메뉴 | 시작 경계 포함, 종료 경계 제외, 정확히 168시간, 수량 합계, 동률 menuId 정렬, 빈 결과 |
+| 시간 | 나노초가 있는 `Clock` 값의 마이크로초 절삭, UTC DB 값과 정확히 같은 `+09:00` API 문자열, 동일한 from/to |
+| 집계 타입 | MySQL `SUM(INT)`의 `DECIMAL` 결과를 범위 확인 후 `longValueExact()`로 변환 |
+| 실행계획 | 별도 성능 프로필의 30일 주문 100,000건·항목 300,000건에서 인기 메뉴 쿼리 계획과 인덱스 확인 |
+
+실행계획에서는 `orders`가 `paid_at` 인덱스로 range 접근하고 `order_item`이 `order_id` 인덱스로 조인되는 것을 기대합니다. 옵티마이저 선택은 데이터 분포에 따라 달라질 수 있으므로 계획이 다르면 테스트를 무조건 실패시키기보다 실제 스캔 행 수와 원인을 기록하고 인덱스를 재검토합니다. CI 환경 편차가 큰 절대 실행 시간은 엄격한 합격 조건으로 사용하지 않습니다.
 
 ## 주요 오류 정책
 
@@ -721,6 +841,8 @@ redrive는 공개 API가 아닌 운영 명령으로 제공합니다. 원인을 �
 | --- | --- | --- |
 | 사용자 또는 메뉴 없음 | 404 | `USER_NOT_FOUND`, `MENU_NOT_FOUND` |
 | 사용자 ID 형식 오류 | 400 | `INVALID_USER_ID` |
+| 잘못된 JSON 문법 | 400 | `MALFORMED_JSON` |
+| 지원하지 않는 Content-Type | 415 | `UNSUPPORTED_MEDIA_TYPE` |
 | 빈 주문, 중복 메뉴, 수량 오류 | 400 | `INVALID_ORDER_REQUEST` |
 | 충전 금액 오류 | 400 | `INVALID_CHARGE_AMOUNT` |
 | 멱등 키 누락 | 400 | `IDEMPOTENCY_KEY_REQUIRED` |
@@ -735,8 +857,8 @@ redrive는 공개 API가 아닌 운영 명령으로 제공합니다. 원인을 �
 
 ## 다음 단계
 
-1. API 명세와 동시성·트랜잭션·Outbox 상세 흐름 최종 검토
-2. Spring Boot 프로젝트 기본 구조 구성
-3. 기능별 구현과 단위·통합·동시성 테스트
-4. MySQL과 Testcontainers 기반 최종 검증
-5. 실행 방법, 테스트 전략과 트러블슈팅을 포함한 제출용 README 완성
+1. Spring Boot 프로젝트 기본 구조 구성
+2. 메뉴 목록 조회 구현 및 테스트
+3. 포인트 충전·이력·멱등성·동시성 구현 및 테스트
+4. 주문·결제·Outbox 게시와 Mock 플랫폼 구현 및 테스트
+5. 인기 메뉴 집계, MySQL Testcontainers 통합 테스트와 제출 문서 완성
