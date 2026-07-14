@@ -8,8 +8,8 @@
 - 3단계 API 명세 작성 완료
 - 4단계 동시성·트랜잭션·Outbox 전략 상세 검토 완료
 - `S5-01` 기술 스택과 프로젝트 구조 승인 및 문서화 완료 (`DONE`, issue #1)
-- 다음 작업: `S5-02` Spring Boot 기본 구조와 MySQL 통합 테스트 환경 (`READY`, issue #2)
-- Spring Boot 프로젝트와 애플리케이션 코드는 아직 생성하지 않음
+- `S5-02` Spring Boot 기본 구조와 MySQL 통합 테스트 환경 완료 (`DONE`, issue #2)
+- 다음 작업: `S6-01` 메뉴 목록 조회 API (`READY`, issue #3)
 
 ## 문서 기준
 
@@ -31,7 +31,8 @@
 - 경량 구현 작업 관리 흐름 추가 (`999f04e`)
 - 튜터 피드백 기반 인덱스·Outbox 간소화, 예외 처리와 부하 확장 기준 보강 (`dd2a27c`)
 - 구현 계획의 `S5-01`~`S15-01`을 GitHub issue #1~#12로 등록
-- Java 17·Spring Boot 3.5.16·Gradle 8.14.3·MySQL 8.4.10과 기능 중심 계층 구조 승인 (`fe6d65b`, issue #1)
+- Java 17·Spring Boot 3.5.16·MySQL 8.4.10과 기능 중심 계층 구조 승인 (`fe6d65b`, issue #1), 공식 Initializr 산출물에 맞춰 Gradle patch를 8.14.5로 보정 (issue #2)
+- Gradle Wrapper·공통 오류·traceId·Flyway V1/V2·MySQL 8.4.10 Testcontainers 기반 구성과 12개 테스트 통과 (issue #2)
 
 ## 확정된 구현 기준
 
@@ -41,19 +42,19 @@
 - 공통 오류·traceId 최소 기반과 MySQL 테스트 기반은 `S5-02`, 기능 전체 오류 계약의 최종 보강은 `S12-01`에서 수행함
 - RestClient·Apache HttpClient 5의 숨은 재시도 부재와 5초 전체 call deadline은 `S9-01` WireMock 실제 소켓 테스트의 합격 조건으로 검증함
 
-현재 진행을 막는 외부 차단 사항은 없다.
+현재 진행을 막는 외부 차단 사항은 없다. Flyway는 MySQL 8.4가 공식 최신 검증 범위보다 새 버전이라는 경고를 출력하지만, 실제 MySQL 8.4.10 smoke test와 migration 검증을 통과했으며 이 호환성 위험은 계속 통합 테스트로 감시한다.
 
 ## 다음 행동
 
-issue #1의 문서 PR을 `dev`에 병합한 뒤 최신 `dev`에서 `feature/issue-2-project-bootstrap` 브랜치를 만든다. `S5-02`의 첫 행동은 Java·Docker 상태를 확인하고 Gradle Wrapper와 context load 테스트를 준비하는 것이다. 정확한 대상 파일, 먼저 수행할 테스트와 완료 명령은 `docs/IMPLEMENTATION_PLAN.md`의 현재 `READY` 작업을 따른다.
+issue #2가 `dev`에 병합된 상태를 확인한 뒤 issue #3의 `feature/issue-3-menu-list-api` 브랜치를 만든다. 먼저 `GET /api/menus`가 404로 실패하는 MySQL API 통합 테스트를 작성하고, 메뉴 목록 계약을 구현한다. 정확한 대상 파일과 완료 명령은 `docs/IMPLEMENTATION_PLAN.md`의 현재 `READY` 작업을 따른다.
 
 ## 작업 재개 기준
 
-- 현재 브랜치: `feature/issue-1-tech-stack-structure`
+- 기준 브랜치: issue #2 병합 후 최신 `dev`
 - 원격 저장소: `https://github.com/usersy628/coffee-order-system.git`
-- GitHub 작업 이슈: #1~#12, 현재 issue #1
+- GitHub 작업 이슈: #1~#12, 다음 issue #3
 - 경량 구현 계획 기준 커밋: `999f04e docs: add lightweight implementation workflow`
 - 최신 설계 기준 커밋: `dd2a27c docs: simplify design after tutor feedback`
 - 승인된 기술 스택과 S5-02 준비 기준 커밋: `fe6d65b docs: approve technology stack and project structure (#1)`
-- 예상 작업 트리: issue #1 변경 커밋 후 clean, `dev`에서 분기
+- 예상 작업 트리: issue #2 병합 직후에는 clean, 다음 작업 브랜치는 `feature/issue-3-menu-list-api`
 - 재개 시 `AGENTS.md`의 저장소 확인 명령으로 실제 상태를 다시 검증

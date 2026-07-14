@@ -2,7 +2,7 @@
 
 다중 서버 환경에서 동시성, 데이터 일관성, 장애 복구를 고려하는 커피 주문 시스템 과제입니다.
 
-요구사항 분석, ERD, API 명세, 동시성·트랜잭션·Outbox 상세 전략과 기술 스택 승인을 완료했으며, 다음 단계에서 Spring Boot 기본 구조를 구성합니다.
+요구사항 분석, ERD, API 명세, 동시성·트랜잭션·Outbox 상세 전략과 기술 스택 승인을 완료했고, Spring Boot 기본 구조와 MySQL 8.4.10 통합 테스트 기반까지 구성했습니다. 다음 구현 대상은 메뉴 목록 조회입니다.
 
 ## 설계 목표와 의도
 
@@ -38,7 +38,7 @@
 | --- | --- | --- | --- |
 | Java | Java 17 LTS | Java 21·25 LTS | 이번 과제에 Java 21 이상의 언어 기능이 필수는 아니며 현재 학습·평가 환경과의 호환 범위를 넓힙니다. 더 최신 LTS의 지원 기간 이점보다 실행 장벽을 낮추는 것을 우선하며, 필요하면 이후 toolchain 버전만 올릴 수 있습니다. |
 | Spring Boot | `3.5.16` | `4.1.0` | [`3.5.16`은 Java 17~25와 Gradle 8.4 이상을 공식 지원](https://docs.spring.io/spring-boot/3.5/system-requirements.html)하는 stable 버전입니다. 최신 major인 4.1은 [Jakarta EE 11, Jackson 3와 starter 구조 변경](https://github.com/spring-projects/spring-boot/wiki/Spring-Boot-4.0-Migration-Guide)이 있어 이번 과제의 핵심인 트랜잭션·동시성 검증보다 마이그레이션 차이에 설명 비용이 커집니다. |
-| 빌드 | Gradle Wrapper `8.14.3`, Groovy DSL | Maven Wrapper, Gradle Kotlin DSL | [Wrapper](https://docs.gradle.org/current/userguide/gradle_wrapper.html)로 개발자·CI·평가자가 같은 버전을 사용합니다. Groovy DSL은 이 규모에서 설정이 짧고 Spring 예제와 비교하기 쉽습니다. Maven의 명시적인 POM과 Kotlin DSL의 타입 안전성도 장점이지만 별도 이득보다 학습 비용이 큽니다. |
+| 빌드 | Gradle Wrapper `8.14.5`, Groovy DSL | Maven Wrapper, Gradle Kotlin DSL | Spring Initializr가 Spring Boot 3.5.16 조합에 생성하는 [Wrapper](https://docs.gradle.org/current/userguide/gradle_wrapper.html) patch를 고정하여 개발자·CI·평가자가 같은 버전을 사용합니다. Groovy DSL은 이 규모에서 설정이 짧고 Spring 예제와 비교하기 쉽습니다. Maven의 명시적인 POM과 Kotlin DSL의 타입 안전성도 장점이지만 별도 이득보다 학습 비용이 큽니다. |
 | 데이터베이스 | MySQL `8.4.10` LTS | MySQL 8.0, 9.x Innovation | [MySQL 8.4 LTS](https://dev.mysql.com/doc/refman/8.4/en/mysql-releases.html)는 기능 안정성과 장기 지원에 초점을 둡니다. 움직이는 `8.4`·`latest` 태그 대신 [8.4.10](https://dev.mysql.com/doc/relnotes/mysql/8.4/en/)을 Docker Compose와 Testcontainers에 같이 고정하여 재현성을 확보합니다. |
 | 스키마 관리 | Flyway versioned migration | Hibernate DDL, `schema.sql` | `db/migration`을 스키마 변경의 단일 경로로 사용하고 Hibernate는 `ddl-auto=validate`로 매핑만 검증합니다. MySQL 지원을 위해 [`flyway-mysql` 모듈](https://documentation.red-gate.com/fd/mysql-277579322.html)을 명시합니다. |
 
@@ -118,7 +118,7 @@ Spring proxy를 우회하는 self-invocation을 막기 위해 충전과 주문�
 ### 설정, 초기 데이터와 테스트 구성
 
 - `application.yml`에는 UTC, JPA `ddl-auto=validate`, Open Session In View 비활성화와 공통 설정을 둡니다.
-- `application-local.yml`은 환경 변수로 로컬 MySQL에 연결하고, `compose.yaml`은 `mysql:8.4.10`을 실행합니다. 저장소에는 운영 비밀번호를 두지 않습니다.
+- `application-local.yml`은 환경 변수로 로컬 MySQL에 연결하고, `compose.yaml`은 `mysql:8.4.10`을 실행합니다. 예측 가능한 개발용 기본 비밀번호가 외부에 노출되지 않도록 host port는 `127.0.0.1`에만 바인딩하며 저장소에는 운영 비밀번호를 두지 않습니다.
 - `application-test.yml`에는 고정 JDBC URL을 넣지 않고 `MySQLContainer`와 `@ServiceConnection`이 JDBC와 Flyway 연결 정보를 제공합니다.
 - HikariCP는 인스턴스당 최대 10개 연결, 연결 획득 대기 2초, 검증 대기 1초로 시작하고 `connectionInitSql`로 새 MySQL session의 `innodb_lock_wait_timeout`을 2초로 설정합니다.
 - Hikari 연결 획득 대기 2초, MySQL 행 락 대기 2초와 명령 트랜잭션 timeout 5초는 서로 다른 제한입니다. 연결 획득은 트랜잭션 시작 전에 발생할 수 있으므로 명령 트랜잭션 5초에 항상 포함된다고 가정하지 않습니다.
@@ -490,6 +490,7 @@ sequenceDiagram
 | 분류 | 처리 위치와 정책 |
 | --- | --- |
 | JSON 문법·타입 오류 | `HttpMessageNotReadableException`을 `400 MALFORMED_JSON`으로 변환합니다. 예를 들어 문자열 형태의 `amount`는 범위 오류가 아니라 JSON 타입 오류입니다. |
+| 존재하지 않는 API 경로 | `NoHandlerFoundException`과 `NoResourceFoundException`을 `404 ENDPOINT_NOT_FOUND`로 변환하여 catch-all이 서버 오류로 오분류하지 않게 합니다. |
 | 요청 값 검증 | Bean Validation과 교차 필드 검증 결과를 충전은 `INVALID_CHARGE_AMOUNT`, 주문은 `INVALID_ORDER_REQUEST`로 변환합니다. 여러 오류는 `details.fieldErrors` 배열에 `field`, `reason`, 선택적인 `rejectedValue`로 반환합니다. |
 | 도메인 오류 | 작은 `ErrorCode`와 단일 `DomainException` 조합으로 기존 404·409 정책을 표현하며 오류 코드마다 예외 클래스를 만들지 않습니다. |
 | 멱등 유니크 충돌 | 모든 `DataIntegrityViolationException`을 409로 바꾸지 않습니다. 이름을 지정한 멱등 유니크 제약만 명령 계층에서 식별하여 전체 롤백 후 새 읽기 전용 트랜잭션으로 재현 또는 `IDEMPOTENCY_KEY_REUSED`를 판단합니다. 그 밖의 FK·CHECK 위반은 구현 결함으로 취급합니다. |
@@ -972,6 +973,7 @@ RPS 자체만으로 스케일 아웃하지 않습니다. DB가 병목인데 애�
 | 상황 | HTTP 상태 | 오류 코드 예시 |
 | --- | --- | --- |
 | 사용자 또는 메뉴 없음 | 404 | `USER_NOT_FOUND`, `MENU_NOT_FOUND` |
+| 존재하지 않는 API 경로 | 404 | `ENDPOINT_NOT_FOUND` |
 | 사용자 ID 형식 오류 | 400 | `INVALID_USER_ID` |
 | 잘못된 JSON 문법 | 400 | `MALFORMED_JSON` |
 | 지원하지 않는 Content-Type | 415 | `UNSUPPORTED_MEDIA_TYPE` |
@@ -991,10 +993,9 @@ RPS 자체만으로 스케일 아웃하지 않습니다. DB가 병목인데 애�
 
 ## 다음 단계
 
-구현 작업의 상태, 선행 관계, 대상 파일과 검증 기준은 [`docs/IMPLEMENTATION_PLAN.md`](docs/IMPLEMENTATION_PLAN.md)에서 관리합니다. 이 문서는 구현 순서만 관리하며, 요구사항·ERD·API 계약과 기술적 결정의 단일 기준은 계속 `README.md`입니다. 아래 목록은 고수준 마일스톤이며 세부 실행 순서는 구현 계획 문서를 따릅니다.
+구현 작업의 상태, 선행 관계, 대상 파일과 검증 기준은 [`docs/IMPLEMENTATION_PLAN.md`](docs/IMPLEMENTATION_PLAN.md)에서 관리합니다. 이 문서는 구현 순서만 관리하며, 요구사항·ERD·API 계약과 기술적 결정의 단일 기준은 계속 `README.md`입니다. Spring Boot 기본 구조와 MySQL Testcontainers 기반은 완료했으며, 아래 목록은 남은 고수준 마일스톤입니다.
 
-1. Spring Boot 프로젝트 기본 구조 구성
-2. 메뉴 목록 조회 구현 및 테스트
-3. 포인트 충전·이력·멱등성·동시성 구현 및 테스트
-4. 주문·결제·Outbox 게시와 Mock 플랫폼 구현 및 테스트
-5. 인기 메뉴 집계, MySQL Testcontainers 통합 테스트와 제출 문서 완성
+1. 메뉴 목록 조회 구현 및 테스트
+2. 포인트 충전·이력·멱등성·동시성 구현 및 테스트
+3. 주문·결제·Outbox 게시와 Mock 플랫폼 구현 및 테스트
+4. 인기 메뉴 집계, MySQL Testcontainers 회귀·부하 테스트와 제출 문서 완성

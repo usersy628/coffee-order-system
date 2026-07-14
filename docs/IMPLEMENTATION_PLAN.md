@@ -44,8 +44,8 @@
 | ID | 상태 | 선행 작업 | 결과물 | 독립 완료 신호 |
 | --- | --- | --- | --- | --- |
 | [`S5-01`](https://github.com/usersy628/coffee-order-system/issues/1) | `DONE` | 4단계 설계 완료 | 기술 스택·패키지 구조·설정 및 테스트 구성 추천안과 승인 | 선택 사항이 문서화되고 사용자가 승인함 |
-| [`S5-02`](https://github.com/usersy628/coffee-order-system/issues/2) | `READY` | `S5-01` | Spring Boot·빌드 도구 기본 구조, traceId·공통 오류 기반과 MySQL Testcontainers 환경 | 기본 컨텍스트·공통 예외 smoke test·MySQL smoke 테스트와 빌드 성공 |
-| [`S6-01`](https://github.com/usersy628/coffee-order-system/issues/3) | `BACKLOG` | `S5-02` | 메뉴 목록 조회 API와 테스트 | 메뉴 목록 계약·통합 테스트 성공 |
+| [`S5-02`](https://github.com/usersy628/coffee-order-system/issues/2) | `DONE` | `S5-01` | Spring Boot·빌드 도구 기본 구조, traceId·공통 오류 기반과 MySQL Testcontainers 환경 | 기본 컨텍스트·공통 예외 smoke test·MySQL smoke 테스트와 빌드 성공 |
+| [`S6-01`](https://github.com/usersy628/coffee-order-system/issues/3) | `READY` | `S5-02` | 메뉴 목록 조회 API와 테스트 | 메뉴 목록 계약·통합 테스트 성공 |
 | [`S7-01`](https://github.com/usersy628/coffee-order-system/issues/4) | `BACKLOG` | `S5-02` | 포인트 충전·이력·멱등성·동시성 처리 | 실제 MySQL 단일·중복·경합 충전 테스트 성공 |
 | [`S8-01`](https://github.com/usersy628/coffee-order-system/issues/5) | `BACKLOG` | `S6-01`, `S7-01` | 여러 메뉴 주문·결제·멱등성과 트랜잭션 내 Outbox 저장 | 실제 MySQL 원자성·중복 요청·동시 주문 테스트 성공 |
 | [`S9-01`](https://github.com/usersy628/coffee-order-system/issues/6) | `BACKLOG` | `S8-01` | Outbox 게시자와 Mock 데이터 수집 플랫폼 | 2xx 성공, 4xx 즉시 실패, 네트워크·timeout·5xx 최대 5회 재시도, lease·fencing·중복 제거 테스트 성공 |
@@ -60,9 +60,75 @@
 
 ## 현재 READY 작업
 
-### [`S5-02`](https://github.com/usersy628/coffee-order-system/issues/2) Spring Boot 기본 구조와 MySQL 통합 테스트 환경 구성
+### [`S6-01`](https://github.com/usersy628/coffee-order-system/issues/3) 메뉴 목록 조회 API 구현
 
 - 상태: `READY`
+- 목적: 판매 상태와 관계없이 전체 메뉴를 ID 오름차순으로 조회하는 `GET /api/menus`를 구현하고 HTTP 계약부터 실제 MySQL 조회까지 검증한다.
+- 요구사항 근거:
+  - `README.md`의 `기술 스택과 프로젝트 구조 > 패키지와 계층 경계`
+  - `README.md`의 `API 명세 > 공통 규칙`
+  - `README.md`의 `API 명세 > 메뉴 목록 조회`
+  - `README.md`의 `테이블 설계 > menu`
+  - `README.md`의 `테스트 전략`
+- 선행 작업: `S5-02` 완료와 issue #2의 `dev` 병합
+- 작업 브랜치: issue #2 병합 후 최신 `dev`에서 `feature/issue-3-menu-list-api` 생성
+- 대상 파일:
+  - `src/main/java/com/usersy628/coffeeorder/menu/domain/Menu.java`
+  - `src/main/java/com/usersy628/coffeeorder/menu/domain/MenuStatus.java`
+  - `src/main/java/com/usersy628/coffeeorder/menu/application/MenuQueryRepository.java`
+  - `src/main/java/com/usersy628/coffeeorder/menu/application/MenuQueryService.java`
+  - `src/main/java/com/usersy628/coffeeorder/menu/infrastructure/MenuJpaRepository.java`
+  - `src/main/java/com/usersy628/coffeeorder/menu/api/MenuController.java`
+  - `src/main/java/com/usersy628/coffeeorder/menu/api/MenuResponse.java`
+  - `src/test/java/com/usersy628/coffeeorder/menu/api/MenuControllerTest.java`
+  - `src/test/java/com/usersy628/coffeeorder/menu/api/MenuApiIntegrationTest.java`
+- 먼저 수행할 테스트 또는 검증:
+  1. 운영 클래스를 추가하기 전에 기존 `MockMvc`와 `JdbcTemplate`만 사용하는 `MenuApiIntegrationTest`를 작성한다.
+  2. `GET /api/menus`가 아직 없어 `404 ENDPOINT_NOT_FOUND`로 실패하는 것을 확인한다.
+  3. 테스트 트랜잭션에서 메뉴를 ID `30`, `10`, `20` 순서로 삽입하고 응답은 `10`, `20`, `30` 순서인지 검증한다.
+  4. `STOPPED` 메뉴 포함, 네 응답 필드, 서버 생성 `X-Trace-Id`와 메뉴가 없을 때 `200 OK`, 빈 배열을 검증한다.
+  5. 구현 후 `MenuControllerTest`에서 application service를 대체하여 같은 HTTP 계약을 DB 없이 빠르게 검증한다.
+- 구현 범위:
+  - `Menu`와 `MenuStatus.ON_SALE`, `MenuStatus.STOPPED` JPA 매핑
+  - application 계층의 `MenuQueryRepository.findAllByOrderByIdAsc()` 조회 port
+  - `@Transactional(readOnly = true)`인 `MenuQueryService`
+  - `MenuJpaRepository`가 Spring Data repository와 application port를 함께 확장하여 프록시가 port를 직접 구현하는 최소 adapter 구성
+  - 쿼리 메서드의 `ORDER BY id ASC`로 DB 조회 순서 보장
+  - 엔티티를 직접 직렬화하지 않고 `MenuResponse(menuId, name, price, status)`로 변환
+  - `GET /api/menus`, `200 OK`, `application/json`
+- 제외 범위:
+  - 메뉴 등록·수정·삭제와 판매 상태 변경 API
+  - 페이지네이션, 검색, 필터링과 정렬 query parameter
+  - Redis 캐시, read replica와 별도 조회 모델
+  - `/api/v1` 경로
+  - 메뉴가 없을 때 `404` 반환
+  - 새 Flyway migration 또는 seed 변경
+  - 기능 전용 오류 코드, UseCase interface, 범용 Mapper, BaseEntity와 수동 RepositoryAdapter
+- 완료 조건:
+  - `GET /api/menus`가 `menuId`, `name`, `price`, `status`만 반환한다.
+  - 판매 중지 메뉴를 포함한 모든 메뉴가 ID 오름차순으로 반환된다.
+  - 메뉴가 없으면 `200 OK`와 빈 JSON 배열을 반환한다.
+  - 실제 MySQL `8.4.10`에서 JPA 매핑과 전체 HTTP 경로가 성공한다.
+  - 통합 테스트가 V2 seed의 삽입 순서에 우연히 의존하지 않는다.
+  - 기존 테스트를 포함한 전체 테스트와 `bootJar`가 성공한다.
+  - H2, 캐시와 불필요한 계층·의존성이 추가되지 않는다.
+- 검증 명령:
+
+```powershell
+docker info
+.\gradlew.bat test --tests "com.usersy628.coffeeorder.menu.api.MenuApiIntegrationTest"
+.\gradlew.bat test --tests "com.usersy628.coffeeorder.menu.api.MenuControllerTest" --tests "com.usersy628.coffeeorder.menu.api.MenuApiIntegrationTest"
+.\gradlew.bat clean test
+.\gradlew.bat bootJar
+git diff --check
+git status --short
+```
+
+## 완료 작업 상세
+
+### [`S5-02`](https://github.com/usersy628/coffee-order-system/issues/2) Spring Boot 기본 구조와 MySQL 통합 테스트 환경 구성
+
+- 상태: `DONE`
 - 목적: 이후 기능이 공통으로 사용할 실행·DB migration·오류 응답·traceId·시간과 실제 MySQL 테스트 기반을 만든다.
 - 요구사항 근거:
   - `README.md`의 `기술 스택과 프로젝트 구조`
@@ -100,12 +166,12 @@
   - `src/test/resources/application-test.yml`
 - 먼저 수행할 테스트 또는 검증:
   1. `java -version`, `docker version`, `docker compose version`으로 Java 17과 Docker 실행 조건을 확인한다.
-  2. Spring Boot `3.5.16`, Gradle Wrapper `8.14.3`과 승인된 기본 의존성만 포함한 최소 빌드 구조를 만든다.
+  2. Spring Boot `3.5.16`, Gradle Wrapper `8.14.5`와 승인된 기본 의존성만 포함한 최소 빌드 구조를 만든다.
   3. `CoffeeOrderApplicationTests`의 context load 테스트를 먼저 실행한다.
   4. 성공·오류 응답의 `X-Trace-Id`, 오류 body의 `traceId`와 요청 종료 후 MDC 정리를 확인하는 실패 테스트를 작성한 뒤 오류·trace 기반을 구현한다.
   5. 빈 MySQL `8.4.10` 컨테이너의 Flyway 적용, Hibernate `validate`, seed 사용자별 0P 지갑과 session 락 대기 2초를 확인하는 실패 테스트를 작성한 뒤 설정과 migration을 구현한다.
 - 구현 범위:
-  - Java 17 toolchain, Spring Boot `3.5.16`, Gradle Wrapper `8.14.3` Groovy DSL
+  - Java 17 toolchain, Spring Boot `3.5.16`, Gradle Wrapper `8.14.5` Groovy DSL
   - Spring Web·Validation·Data JPA·Actuator, MySQL Connector/J, Flyway와 MySQL Testcontainers
   - Flyway만 사용하는 schema 생성과 과제용 고정 초기 사용자·메뉴·0P 지갑
   - `Clock.systemUTC()` Bean과 UTC JDBC·Hibernate 설정
