@@ -6,7 +6,7 @@
 
 - 기준 개발 브랜치: `dev`, S9 시작 기준 HEAD `d799341` (PR #27 merge commit)
 - 현재 작업 브랜치: `feature/issue-6-outbox-publisher`
-- `S9-01` Outbox 게시자와 Mock 데이터 수집 플랫폼: 구현 `DONE`, 기능 커밋 `3fc13a4`, issue #6 `OPEN`, PR 미생성
+- `S9-01` Outbox 게시자와 Mock 데이터 수집 플랫폼: 구현 `DONE`, 기능 커밋 `3fc13a4`, issue #6 `OPEN`, [PR #28](https://github.com/usersy628/coffee-order-system/pull/28) `OPEN`, 필수 `Build and test` 성공 (1분 52초)
 - 완료 상세와 실제 검증 결과: [`IMPLEMENTATION_HISTORY.md`](IMPLEMENTATION_HISTORY.md)
 
 ## 현재 결정
@@ -18,4 +18,4 @@
 
 ## 다음 행동
 
-`feature/issue-6-outbox-publisher`를 push한 뒤, History의 S9 전체 상세를 UTF-8 `--body-file`로 사용해 `dev` 대상 PR을 만들고 GitHub 원본 본문을 재검증한다.
+PR #28을 별도 검토자가 검토한다. 지적 사항이 없거나 반영 뒤 CI가 다시 성공한 경우에도, 사용자의 해당 PR 명시적 승인 전에는 병합하지 않는다.
