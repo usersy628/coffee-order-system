@@ -6,7 +6,7 @@
 
 - 기준 개발 브랜치: `dev`, S9 시작 기준 HEAD `d799341` (PR #27 merge commit)
 - 현재 작업 브랜치: `feature/issue-6-outbox-publisher`
-- `S9-01` Outbox 게시자와 Mock 데이터 수집 플랫폼: 구현 `DONE`, 기능 커밋 `3fc13a4`, issue #6 `OPEN`, [PR #28](https://github.com/usersy628/coffee-order-system/pull/28) `OPEN`, 필수 `Build and test` 성공 (1분 52초)
+- `S9-01` Outbox 게시자와 Mock 데이터 수집 플랫폼: 구현 `DONE`, 기능 커밋 `3fc13a4`, issue #6 `OPEN`, [PR #28](https://github.com/usersy628/coffee-order-system/pull/28) `OPEN`, 필수 `Build and test` 결과는 PR의 최신 check를 기준으로 확인
 - 완료 상세와 실제 검증 결과: [`IMPLEMENTATION_HISTORY.md`](IMPLEMENTATION_HISTORY.md)
 
 ## 현재 결정

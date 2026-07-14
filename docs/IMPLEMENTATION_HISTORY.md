@@ -10,7 +10,7 @@
 
 - 상태: `DONE`
 - issue: [#6](https://github.com/usersy628/coffee-order-system/issues/6) `OPEN`
-- PR: [#28](https://github.com/usersy628/coffee-order-system/pull/28) `OPEN`, 필수 `Build and test` 성공 (1분 52초)
+- PR: [#28](https://github.com/usersy628/coffee-order-system/pull/28) `OPEN`, 필수 `Build and test` 결과는 PR의 최신 check를 기준으로 확인
 - merge commit: 병합 후 기록
 - 완료일: 2026-07-15
 - 구현 커밋: `3fc13a4` (`feat: add outbox publisher (#6)`)
