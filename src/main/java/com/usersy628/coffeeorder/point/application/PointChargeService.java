@@ -3,8 +3,6 @@ package com.usersy628.coffeeorder.point.application;
 import java.util.Optional;
 import java.util.concurrent.ThreadLocalRandom;
 
-import com.usersy628.coffeeorder.global.error.DomainException;
-import com.usersy628.coffeeorder.global.error.ErrorCode;
 import org.springframework.dao.PessimisticLockingFailureException;
 import org.springframework.stereotype.Service;
 
@@ -42,7 +40,7 @@ public class PointChargeService {
 				return replayReader.readAfterUniqueConflict(command, requestHash);
 			} catch (PessimisticLockingFailureException exception) {
 				if (attempt == retryProperties.getMaxAttempts()) {
-					throw new DomainException(ErrorCode.CONCURRENT_REQUEST_TIMEOUT);
+					throw new PointChargeRetryFailureException(attempt, exception);
 				}
 				backoff(attempt);
 			}
@@ -60,7 +58,7 @@ public class PointChargeService {
 			Thread.sleep(delayMillis);
 		} catch (InterruptedException exception) {
 			Thread.currentThread().interrupt();
-			throw new DomainException(ErrorCode.CONCURRENT_REQUEST_TIMEOUT);
+			throw new PointChargeRetryFailureException(failedAttempt, exception);
 		}
 	}
 }

@@ -6,6 +6,7 @@ import java.util.Map;
 
 import com.usersy628.coffeeorder.global.trace.TraceIdFilter;
 import com.usersy628.coffeeorder.point.api.PointChargeRequest;
+import com.usersy628.coffeeorder.point.application.PointChargeRetryFailureException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
@@ -26,6 +27,25 @@ public class GlobalExceptionHandler {
 
 	private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 	private static final String IDEMPOTENCY_KEY_HEADER = "Idempotency-Key";
+
+	@ExceptionHandler(PointChargeRetryFailureException.class)
+	public ResponseEntity<ApiErrorResponse> handlePointChargeRetryFailure(
+		PointChargeRetryFailureException exception
+	) {
+		ErrorCode errorCode = exception.getErrorCode();
+		String traceId = currentTraceId();
+		String causeType = exception.getCause().getClass().getSimpleName();
+		log.warn(
+			"Point charge retry failed code={} attempts={} causeType={} traceId={}",
+			errorCode.name(),
+			exception.getAttemptCount(),
+			causeType,
+			traceId
+		);
+
+		return ResponseEntity.status(errorCode.getHttpStatus())
+			.body(ApiErrorResponse.from(errorCode, exception.getDetails(), traceId));
+	}
 
 	@ExceptionHandler(DomainException.class)
 	public ResponseEntity<ApiErrorResponse> handleDomainException(DomainException exception) {

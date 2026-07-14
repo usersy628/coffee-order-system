@@ -12,6 +12,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.usersy628.coffeeorder.global.trace.TraceIdFilter;
 import com.usersy628.coffeeorder.point.api.PointChargeRequest;
+import com.usersy628.coffeeorder.point.application.PointChargeRetryFailureException;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Min;
 import org.junit.jupiter.api.AfterEach;
@@ -19,6 +20,8 @@ import org.junit.jupiter.api.Test;
 import org.slf4j.MDC;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
@@ -30,9 +33,12 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.dao.PessimisticLockingFailureException;
+import org.junit.jupiter.api.extension.ExtendWith;
 
 @WebMvcTest(controllers = GlobalExceptionHandlerTest.TestController.class)
 @Import(GlobalExceptionHandlerTest.TestController.class)
+@ExtendWith(OutputCaptureExtension.class)
 class GlobalExceptionHandlerTest {
 
 	@Autowired
@@ -163,6 +169,23 @@ class GlobalExceptionHandlerTest {
 		assertTraceIdMatchesHeader(result);
 	}
 
+	@Test
+	void logsPointChargeRetryFailureAsWarnWithAttemptsAndCauseType(CapturedOutput output) throws Exception {
+		MvcResult result = mockMvc.perform(get("/test/point-charge-retry-failure"))
+			.andExpect(status().isServiceUnavailable())
+			.andExpect(jsonPath("$.code").value("CONCURRENT_REQUEST_TIMEOUT"))
+			.andExpect(jsonPath("$.details").isEmpty())
+			.andReturn();
+
+		assertTraceIdMatchesHeader(result);
+		assertThat(output.getOut())
+			.contains(" WARN ")
+			.contains("code=CONCURRENT_REQUEST_TIMEOUT")
+			.contains("attempts=3")
+			.contains("causeType=PessimisticLockingFailureException")
+			.doesNotContain("review-sensitive-idempotency-key");
+	}
+
 	private void assertTraceIdMatchesHeader(MvcResult result) throws Exception {
 		String headerTraceId = result.getResponse().getHeader(TraceIdFilter.TRACE_ID_HEADER);
 		JsonNode responseBody = objectMapper.readTree(result.getResponse().getContentAsByteArray());
@@ -201,6 +224,14 @@ class GlobalExceptionHandlerTest {
 			@RequestBody TestRequest request
 		) {
 			return Map.of("amount", request.amount());
+		}
+
+		@GetMapping("/point-charge-retry-failure")
+		void pointChargeRetryFailure() {
+			throw new PointChargeRetryFailureException(
+				3,
+				new PessimisticLockingFailureException("review-sensitive-idempotency-key")
+			);
 		}
 
 		@PostMapping(value = "/charge-validation", consumes = MediaType.APPLICATION_JSON_VALUE)

@@ -10,7 +10,6 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.Optional;
 
-import com.usersy628.coffeeorder.global.error.DomainException;
 import com.usersy628.coffeeorder.global.error.ErrorCode;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -60,14 +59,19 @@ class PointChargeServiceTest {
 	@Test
 	void returnsConcurrentRequestTimeoutAfterRetryExhaustion() {
 		PointChargeCommand command = new PointChargeCommand(1L, 100L, "exhausted-key");
+		PessimisticLockingFailureException lockFailure =
+			new PessimisticLockingFailureException("forced lock timeout");
 		when(requestHasher.hash(100L)).thenReturn("hash");
 		when(replayReader.findExisting(command, "hash")).thenReturn(Optional.empty());
 		when(transactionExecutor.execute(command, "hash"))
-			.thenThrow(new PessimisticLockingFailureException("forced lock timeout"));
+			.thenThrow(lockFailure);
 
 		assertThatThrownBy(() -> pointChargeService.charge(command))
-			.isInstanceOfSatisfying(DomainException.class, exception ->
-				assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.CONCURRENT_REQUEST_TIMEOUT));
+			.isInstanceOfSatisfying(PointChargeRetryFailureException.class, exception -> {
+				assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.CONCURRENT_REQUEST_TIMEOUT);
+				assertThat(exception.getAttemptCount()).isEqualTo(3);
+				assertThat(exception.getCause()).isSameAs(lockFailure);
+			});
 		verify(transactionExecutor, org.mockito.Mockito.times(3)).execute(command, "hash");
 	}
 }
