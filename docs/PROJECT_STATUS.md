@@ -13,7 +13,7 @@
 - `S6-01` 메뉴 목록 조회 API 완료 (`DONE`, issue #3)
 - `S5-04` PR 검토와 명시적 병합 승인 규칙 문서화 완료 (`DONE`, issue #20)
 - `S6-02` 메뉴 UTC 시간 매핑과 README 구현 상태 정합성 보완 완료 (`DONE`, issue #22)
-- 후속 준비 작업: `S7-01` 포인트 충전 API 상세 구체화 (`BACKLOG`, issue #4)
+- `S7-01` 포인트 충전 API 구현 완료 (`DONE`, issue #4, PR 생성·검토 대기)
 
 ## 문서 기준
 
@@ -45,6 +45,9 @@
 - PR 생성·CI 성공 후 별도 검토와 사용자 명시적 승인 전 자동 병합을 금지하는 workflow 확정 (`24fb9ef`, issue #20)
 - 메뉴 생성·수정 시각을 UTC `Instant`로 통일하고 MySQL `DATETIME(6)` 마이크로초 조회 검증 추가 (`525d985`, issue #22)
 - README의 완료된 메뉴 목록과 다음 포인트 충전 준비 상태 정합성 갱신 (`fd26552`, issue #22)
+- 포인트 충전 API, 지갑·이력 원자성, 멱등 결과 재현과 충전 오류 계약 구현 (`3227271`, issue #4)
+- 동일 사용자·동일 멱등 키 100개 동시 요청, 사용자별 병렬 처리, 실제 락 타임아웃·데드락·롤백 검증 (`648f225`, `6a1a688`, issue #4)
+- PR #24 리뷰에 따라 503 재시도 실패의 횟수·원인 타입을 보존하고 민감정보 없이 WARN으로 기록하도록 보완 (`4c1ebbf`, issue #4)
 
 ## 확정된 구현 기준
 
@@ -57,21 +60,24 @@
 - PR 생성과 필수 CI 성공 후에도 자동 병합하지 않으며, 별도 검토 결과를 반영하고 사용자가 해당 PR의 병합을 명시적으로 승인한 경우에만 `dev`에 병합함
 - 메뉴 목록은 MySQL primary에서 판매 상태와 관계없이 전체 메뉴를 ID 오름차순으로 조회하고, `menuId`, `name`, `price`, `status`만 반환함
 - 메뉴의 `createdAt`, `updatedAt`은 UTC `Instant`로 매핑하고 MySQL `DATETIME(6)`의 마이크로초 정밀도로 조회함
+- 포인트 충전은 지갑을 먼저 비관적 락으로 잠그고 이력을 재확인하며, 지갑 증가와 `CHARGE` 이력을 5초 제한의 한 트랜잭션으로 커밋함
+- 충전의 같은 멱등 키·같은 금액은 최초 잔액과 시각을 재현하고, 다른 금액은 409로 거절하며, 락·데드락은 전체 명령을 최대 3회 시도한 뒤 503으로 변환함
+- 충전 재시도 실패는 전용 예외에 실제 시도 횟수와 원인을 보존하고 Advice에서 오류 코드·횟수·원인 타입·traceId만 WARN으로 기록함
 - RestClient·Apache HttpClient 5의 숨은 재시도 부재와 5초 전체 call deadline은 `S9-01` WireMock 실제 소켓 테스트의 합격 조건으로 검증함
 
 현재 진행을 막는 외부 차단 사항은 없다. Flyway는 MySQL 8.4가 공식 최신 검증 범위보다 새 버전이라는 경고를 출력하지만, 실제 MySQL 8.4.10 smoke test와 migration 검증을 통과했으며 이 호환성 위험은 계속 통합 테스트로 감시한다.
 
 ## 다음 행동
 
-issue #22가 `dev`에 병합된 상태를 확인한 뒤 issue #4의 요구사항과 README 포인트 충전 계약을 대조한다. `S7-01`의 정확한 대상 파일, 먼저 실패시킬 테스트와 검증 명령을 `docs/IMPLEMENTATION_PLAN.md`에 기록하고 사용자 승인을 받아 `READY`로 전환한다. 승인 전에는 구현 브랜치를 만들지 않는다.
+issue #4 브랜치를 원격에 push하고 `dev` 대상 PR을 만든다. 필수 CI 성공 후 자동 병합하지 않고 별도 검토와 사용자의 명시적 병합 승인을 기다린다.
 
 ## 작업 재개 기준
 
-- 기준 브랜치: issue #22 병합 후 최신 `dev`
+- 기준 브랜치: `feature/issue-4-point-charge-api`
 - 원격 저장소: `https://github.com/usersy628/coffee-order-system.git`
-- GitHub 작업 이슈: #1~#12, #15, #17, #20, #22, 다음 준비 issue #4
+- GitHub 작업 이슈: #1~#12, #15, #17, #20, #22, 현재 issue #4, 다음 준비 issue #5
 - 경량 구현 계획 기준 커밋: `999f04e docs: add lightweight implementation workflow`
 - 최신 설계 기준 커밋: `dd2a27c docs: simplify design after tutor feedback`
 - 승인된 기술 스택과 S5-02 준비 기준 커밋: `fe6d65b docs: approve technology stack and project structure (#1)`
-- 예상 작업 트리: issue #22 병합 직후에는 clean, `S7-01` 승인 전에는 issue #4 브랜치를 만들지 않음
+- 예상 작업 트리: 문서 완료 커밋 후 clean, PR 생성과 검토 대기
 - 재개 시 `AGENTS.md`의 저장소 확인 명령으로 실제 상태를 다시 검증

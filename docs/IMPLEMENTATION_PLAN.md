@@ -49,7 +49,7 @@
 | [`S5-04`](https://github.com/usersy628/coffee-order-system/issues/20) | `DONE` | `S5-03` | PR 검토와 명시적 병합 승인 workflow 문서화 | PR·CI 후 검토 대기와 사용자 승인 전 병합 금지가 명시됨 |
 | [`S6-01`](https://github.com/usersy628/coffee-order-system/issues/3) | `DONE` | `S5-03` | 메뉴 목록 조회 API와 테스트 | 메뉴 목록 계약·통합 테스트 성공 |
 | [`S6-02`](https://github.com/usersy628/coffee-order-system/issues/22) | `DONE` | `S6-01`, `S5-04` | 메뉴 UTC 시간 매핑과 README 구현 상태 정합성 보완 | MySQL `DATETIME(6)`·`Instant` 정밀도 테스트와 문서 정합성 검증 성공 |
-| [`S7-01`](https://github.com/usersy628/coffee-order-system/issues/4) | `BACKLOG` | `S5-03` | 포인트 충전·이력·멱등성·동시성과 충전 요청 검증 오류 처리 | 실제 MySQL 단일·중복·경합 충전과 `INVALID_CHARGE_AMOUNT` 계약 테스트 성공 |
+| [`S7-01`](https://github.com/usersy628/coffee-order-system/issues/4) | `DONE` | `S5-03` | 포인트 충전·이력·멱등성·동시성과 충전 요청 검증 오류 처리 | 실제 MySQL 단일·중복·경합 충전과 `INVALID_CHARGE_AMOUNT` 계약 테스트 성공 |
 | [`S8-01`](https://github.com/usersy628/coffee-order-system/issues/5) | `BACKLOG` | `S6-01`, `S7-01` | 여러 메뉴 주문·결제·멱등성, 트랜잭션 내 Outbox 저장과 주문 요청 검증 오류 처리 | 실제 MySQL 원자성·중복 요청·동시 주문과 `INVALID_ORDER_REQUEST` 계약 테스트 성공 |
 | [`S9-01`](https://github.com/usersy628/coffee-order-system/issues/6) | `BACKLOG` | `S8-01` | Outbox 게시자와 Mock 데이터 수집 플랫폼 | 2xx 성공, 4xx 즉시 실패, 네트워크·timeout·5xx 최대 5회 재시도, lease·fencing·중복 제거 테스트 성공 |
 | [`S10-01`](https://github.com/usersy628/coffee-order-system/issues/7) | `BACKLOG` | `S8-01` | 최근 168시간 인기 메뉴 TOP 3 조회 | 실제 MySQL 기간 경계·수량·동률 정렬 테스트 성공 |
@@ -60,6 +60,110 @@
 | [`S15-01`](https://github.com/usersy628/coffee-order-system/issues/12) | `BACKLOG` | `S13-01`, `S14-01` | 전체 테스트·보안정보·공개 저장소 제출 검증 | 깨끗한 clone 기준 빌드와 전체 테스트 성공 |
 
 `S9-01`과 `S10-01`은 모두 `S8-01`만 직접 선행하므로 서로 독립적으로 진행할 수 있다. MySQL Testcontainers 기반은 `S5-02`에서 만들고 `S5-03`에서 migration 재실행 검증을 보강한 뒤 각 기능 단계에서 사용하며, `S11-01`에서는 도입이 아니라 기능 간 최종 회귀와 부하·실행계획을 검증한다. 공통 MVC 전송 오류는 `S5-03`, 충전과 주문의 `MethodArgumentNotValidException`은 각각 `S7-01`과 `S8-01`에서 기능별 오류 코드로 구현하고, `S12-01`에서는 전체 API 오류·traceId·로그 계약의 최종 회귀와 누락을 점검한다.
+
+## 현재 작업 상세
+
+### [`S7-01`](https://github.com/usersy628/coffee-order-system/issues/4) 포인트 충전·이력·멱등성·동시성 구현
+
+- 상태: `DONE`
+- 완료 커밋: `1971658`, `3227271`, `648f225`, `6a1a688`, `4c1ebbf`
+- 사용자 승인: 2026-07-14
+- 목적: `POST /api/users/{userId}/points/charges`에서 충전 한도, 지갑과 이력의 원자성, 멱등 결과 재현과 MySQL 비관적 락 기반 동시성 제어를 구현한다.
+- 요구사항 근거:
+  - `README.md`의 `기술 스택과 프로젝트 구조 > 패키지와 계층 경계`
+  - `README.md`의 `핵심 정책 > 포인트`
+  - `README.md`의 `API 명세 > 공통 규칙`과 `포인트 충전`
+  - `README.md`의 `동시성 및 트랜잭션 상세 전략 > 포인트 충전 흐름`과 `락 순서, 타임아웃과 재시도`
+  - `README.md`의 `예외 처리와 추적`
+  - `README.md`의 `테이블 설계 > point_wallet`과 `point_history`
+  - `README.md`의 `테스트 전략`과 `주요 오류 정책`
+- 선행 작업: `S5-03` 완료와 PR #18의 `dev` 병합
+- 작업 브랜치: 최신 `dev`에서 `feature/issue-4-point-charge-api` 생성
+- 대상 파일:
+  - `src/main/java/com/usersy628/coffeeorder/point/api/PointChargeController.java`
+  - `src/main/java/com/usersy628/coffeeorder/point/api/PointChargeRequest.java`
+  - `src/main/java/com/usersy628/coffeeorder/point/api/PointChargeResponse.java`
+  - `src/main/java/com/usersy628/coffeeorder/point/application/PointChargeCommand.java`
+  - `src/main/java/com/usersy628/coffeeorder/point/application/PointChargeResult.java`
+  - `src/main/java/com/usersy628/coffeeorder/point/application/PointChargeService.java`
+  - `src/main/java/com/usersy628/coffeeorder/point/application/PointChargeTransactionExecutor.java`
+  - `src/main/java/com/usersy628/coffeeorder/point/application/PointChargeReplayReader.java`
+  - `src/main/java/com/usersy628/coffeeorder/point/application/PointChargeRequestHasher.java`
+  - `src/main/java/com/usersy628/coffeeorder/point/application/PointChargeRetryProperties.java`
+  - `src/main/java/com/usersy628/coffeeorder/point/application/PointChargeRetryFailureException.java`
+  - `src/main/java/com/usersy628/coffeeorder/point/application/PointWalletRepository.java`
+  - `src/main/java/com/usersy628/coffeeorder/point/application/PointHistoryRepository.java`
+  - `src/main/java/com/usersy628/coffeeorder/point/domain/PointWallet.java`
+  - `src/main/java/com/usersy628/coffeeorder/point/domain/PointHistory.java`
+  - `src/main/java/com/usersy628/coffeeorder/point/domain/PointHistoryType.java`
+  - `src/main/java/com/usersy628/coffeeorder/point/infrastructure/PointWalletJpaRepository.java`
+  - `src/main/java/com/usersy628/coffeeorder/point/infrastructure/PointHistoryJpaRepository.java`
+  - `src/main/java/com/usersy628/coffeeorder/global/error/ErrorCode.java`
+  - `src/main/java/com/usersy628/coffeeorder/global/error/GlobalExceptionHandler.java`
+  - `src/main/resources/application.yml`
+  - `src/test/java/com/usersy628/coffeeorder/point/api/PointChargeApiIntegrationTest.java`
+  - `src/test/java/com/usersy628/coffeeorder/point/application/PointChargeServiceTest.java`
+  - `src/test/java/com/usersy628/coffeeorder/point/infrastructure/PointChargeConcurrencyIntegrationTest.java`
+  - `src/test/java/com/usersy628/coffeeorder/global/error/GlobalExceptionHandlerTest.java`
+  - `README.md`
+  - `docs/IMPLEMENTATION_PLAN.md`
+  - `docs/PROJECT_STATUS.md`
+- 먼저 수행할 테스트 또는 검증:
+  1. 실제 MySQL `8.4.10` 통합 테스트에서 유효한 충전 요청을 보내고 아직 endpoint가 없어 `404 ENDPOINT_NOT_FOUND`로 실패하는 RED를 확인한다.
+  2. 충전 endpoint 골격을 추가한 뒤 DTO 검증 오류가 아직 기능별로 매핑되지 않아 `500`으로 실패하는 RED를 확인한다.
+  3. 구현 후 정상 충전, 정확히 300,000P 허용, 범위·총잔액 한도, 사용자 없음, 지갑·이력 원자성을 검증한다.
+  4. 같은 사용자와 멱등 키의 같은 금액은 최초 결과를 재현하고 다른 금액은 `409 IDEMPOTENCY_KEY_REUSED`인지 검증한다.
+  5. 동일 사용자 100개 동시 요청, 서로 다른 사용자 병렬 요청, 실제 락 타임아웃과 데드락 분류·전체 명령 재시도를 검증한다.
+- 구현 범위:
+  - `userId`, `amount`, `Idempotency-Key` 검증과 충전 기능별 400·404·409·503 오류 계약
+  - `amount` canonical payload의 SHA-256 해시와 대소문자를 구분하는 원문 멱등 키 저장
+  - `point_wallet`을 먼저 `SELECT ... FOR UPDATE`로 잠근 뒤 멱등 이력을 current read로 재확인
+  - 지갑 증가와 `CHARGE point_history` 저장을 한 `@Transactional(timeout = 5)` 명령으로 커밋
+  - 최초 요청은 `Idempotency-Replayed: false`, 같은 요청 재현은 `true`와 최초 잔액·시각 반환
+  - 명령 트랜잭션 밖 coordinator에서 최초 시도 후 최대 2회, 50ms·100ms와 ±20% jitter로 전체 명령 재시도
+  - 이름이 지정된 충전 멱등 유니크 제약 충돌만 전체 롤백 후 새 read-only transaction에서 재현 또는 409 판단
+  - UTC `Instant`를 MySQL `DATETIME(6)`으로 저장하고 API 경계에서 `Asia/Seoul` 오프셋으로 변환
+  - README 구현 상태를 포인트 충전 완료와 다음 주문·결제 준비 단계로 갱신
+- 제외 범위:
+  - 주문, 포인트 차감, Outbox와 인기 메뉴 구현
+  - 외부 결제·PG API와 Redis 분산 락
+  - 인증 principal과 `{userId}` 대조
+  - Flyway schema와 seed 변경
+  - 실패 응답·처리 중 상태·멱등 키 만료를 저장하는 별도 멱등성 테이블
+- 완료 조건:
+  - 충전 금액 범위와 총잔액 한도, 정확히 300,000P 경계가 API와 실제 MySQL에서 일치한다.
+  - 지갑 잔액과 충전 이력이 한 트랜잭션으로 반영되고 실패 시 함께 롤백된다.
+  - 같은 키·같은 금액은 한 번만 충전되고 최초 응답의 잔액과 시각을 재현하며, 다른 금액은 409가 된다.
+  - 동시 요청에서도 잔액·이력이 유실되지 않고 락·데드락 재시도 소진은 503이 된다.
+  - 오류 body `traceId`와 `X-Trace-Id`, `Idempotency-Replayed` 응답 헤더 계약이 지켜진다.
+  - 전체 테스트와 `bootJar`, 필수 CI가 성공한다.
+  - PR을 별도 검토와 사용자의 명시적 승인 전까지 병합하지 않는다.
+- 실제 검증 결과:
+  - 구현 전 `PointChargeApiIntegrationTest`는 실제 MySQL 8.4.10에서 `404 ENDPOINT_NOT_FOUND`로 실패하는 RED를 확인했다.
+  - 포인트 API·재시도·동시성 및 기존 회귀를 포함한 전체 테스트 45개가 성공했고 실패·오류·skip은 0개다.
+  - 동일 사용자 100개 충전, 동일 멱등 키 100개 요청, 서로 다른 사용자 병렬 충전, 실제 락 타임아웃과 강제 데드락을 검증했다.
+  - 이력 저장 실패 시 지갑 변경도 롤백되고 UTC 마이크로초 DB 시각과 `+09:00` 응답이 같은 순간인지 검증했다.
+  - `bootJar`와 `git diff --check`가 성공했다.
+  - PR #24 리뷰 후 503 재시도 실패가 시도 횟수와 원인 타입을 보존하고 민감정보 없이 WARN으로 기록되는 계약 테스트를 추가했다.
+- 계획 대비 변경 사항:
+  - 기능 완료 뒤 README 구현 상태가 뒤처지지 않도록 `README.md`를 대상 파일과 구현 범위에 추가했다.
+  - PR #24 리뷰에 따라 `PointChargeRetryFailureException`을 추가해 503 응답 변환 전 운영 로그 문맥을 보존했다.
+  - Flyway schema와 seed는 계획대로 변경하지 않았다.
+- 검증 명령:
+
+```powershell
+docker info
+.\gradlew.bat test --tests "com.usersy628.coffeeorder.point.api.PointChargeApiIntegrationTest"
+.\gradlew.bat test --tests "com.usersy628.coffeeorder.point.application.PointChargeServiceTest"
+.\gradlew.bat test --tests "com.usersy628.coffeeorder.point.infrastructure.PointChargeConcurrencyIntegrationTest"
+.\gradlew.bat test --tests "com.usersy628.coffeeorder.global.error.GlobalExceptionHandlerTest"
+.\gradlew.bat test --tests "com.usersy628.coffeeorder.point.*"
+.\gradlew.bat clean test
+.\gradlew.bat bootJar
+git diff --check
+git status --short
+gh pr checks
+```
 
 ## 최근 완료 작업
 

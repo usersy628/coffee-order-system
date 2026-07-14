@@ -30,3 +30,11 @@ management:
   endpoint:
     health:
       show-details: never
+
+coffee-order:
+  point:
+    charge:
+      retry:
+        max-attempts: 3
+        initial-backoff: 50ms
+        jitter-factor: 0.2
