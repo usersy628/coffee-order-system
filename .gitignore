@@ -12,6 +12,16 @@ build/
 *.ipr
 out/
 
+### Eclipse ###
+.apt_generated
+.classpath
+.factorypath
+.project
+.settings/
+.springBeans
+.sts4-cache
+bin/
+
 ### Visual Studio Code ###
 .vscode/
 
@@ -19,8 +29,9 @@ out/
 .DS_Store
 Thumbs.db
 
-### Environment ###
+### Local environment ###
 .env
+*.local
 *.log
 
 ### Codex workspace ###
