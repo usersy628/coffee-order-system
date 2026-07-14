@@ -28,6 +28,7 @@
 - 시간·인기 메뉴·MySQL 테스트 전략 보강 (`10c6a8d`)
 - 전체 설계 신뢰성 검토 완료 (`051854b`)
 - 경량 구현 작업 관리 흐름 추가 (`999f04e`)
+- 튜터 피드백 기반 인덱스·Outbox 간소화, 예외 처리와 부하 확장 기준 보강 (`dd2a27c`)
 
 ## 미결 사항
 
@@ -36,19 +37,20 @@
 - 기본 의존성, 패키지 구조와 도메인·애플리케이션·인프라 계층 경계
 - Flyway 적용 여부와 초기 사용자·메뉴 데이터 구성 방식
 - 트랜잭션 재시도와 새 트랜잭션 조회를 Spring proxy 경계에서 분리하는 클래스 구조
-- 외부 Mock 플랫폼 호출에 사용할 HTTP 클라이언트와 테스트 대역 방식
+- 외부 결제 API 없이 Mock 데이터 수집 플랫폼에만 사용할 HTTP 클라이언트와 테스트 대역 방식
 - 로컬·테스트 설정 파일과 MySQL Testcontainers 기반 구성
 
 현재 진행을 막는 외부 차단 사항은 없다. 위 선택은 `S5-01` 추천안을 검토한 뒤 사용자 승인으로 확정한다.
 
 ## 다음 행동
 
-`S5-01`을 수행한다. Java·Spring Boot·빌드 도구·MySQL·Flyway·Testcontainers·HTTP 클라이언트의 추천 버전과 선택 이유, 패키지 구조, 설정 및 테스트 소스 구성을 먼저 제시한다. 사용자가 승인하면 결정 내용을 문서화하고 `S5-02`의 정확한 대상 파일과 검증 명령을 채운 뒤에만 프로젝트 파일을 생성한다.
+`S5-01`을 수행한다. Java·Spring Boot·빌드 도구·MySQL·Flyway·Testcontainers와 Mock 데이터 수집용 HTTP 클라이언트의 추천 버전과 선택 이유, 패키지 구조, 설정 및 테스트 소스 구성을 먼저 제시한다. 사용자가 승인하면 결정 내용을 문서화하고 `S5-02`의 정확한 대상 파일과 검증 명령을 채운 뒤에만 프로젝트 파일을 생성한다.
 
 ## 작업 재개 기준
 
 - 현재 브랜치: `dev`
 - 원격 저장소: `https://github.com/usersy628/coffee-order-system.git`
 - 경량 구현 계획 기준 커밋: `999f04e docs: add lightweight implementation workflow`
+- 최신 설계 기준 커밋: `dd2a27c docs: simplify design after tutor feedback`
 - 예상 작업 트리: clean, `dev`와 `origin/dev` 동기화
 - 재개 시 `AGENTS.md`의 저장소 확인 명령으로 실제 상태를 다시 검증
