@@ -11,7 +11,8 @@
 - `S5-02` Spring Boot 기본 구조와 MySQL 통합 테스트 환경 완료 (`DONE`, issue #2)
 - `S5-03` 리뷰 후속 공통 MVC 오류·Flyway 재실행 검증·PR CI 기반 보완 완료 (`DONE`, issue #17)
 - `S6-01` 메뉴 목록 조회 API 완료 (`DONE`, issue #3)
-- 다음 준비 작업: `S7-01` 포인트 충전 API 상세 구체화 (`BACKLOG`, issue #4)
+- `S5-04` PR 검토와 명시적 병합 승인 규칙 문서화 (`IN_PROGRESS`, issue #20)
+- 후속 준비 작업: `S7-01` 포인트 충전 API 상세 구체화 (`BACKLOG`, issue #4)
 
 ## 문서 기준
 
@@ -49,6 +50,7 @@
 - 공통 오류·traceId 최소 기반과 MySQL 테스트 기반은 `S5-02`, 공통 MVC 전송 오류와 Flyway 재실행 검증은 `S5-03`에서 보강함
 - 충전·주문 DTO 검증 오류는 각각 `S7-01`·`S8-01`에서 기능별 코드로 구현하고, 전체 오류 계약의 최종 회귀는 `S12-01`에서 수행함
 - `dev` 대상 PR은 필수 `Build and test` check에서 Java 17·Docker 기반 전체 테스트, `bootJar`와 `git diff --check`를 통과해야 함
+- PR 생성과 필수 CI 성공 후에도 자동 병합하지 않으며, 별도 검토 결과를 반영하고 사용자가 해당 PR의 병합을 명시적으로 승인한 경우에만 `dev`에 병합함
 - 메뉴 목록은 MySQL primary에서 판매 상태와 관계없이 전체 메뉴를 ID 오름차순으로 조회하고, `menuId`, `name`, `price`, `status`만 반환함
 - RestClient·Apache HttpClient 5의 숨은 재시도 부재와 5초 전체 call deadline은 `S9-01` WireMock 실제 소켓 테스트의 합격 조건으로 검증함
 
@@ -56,7 +58,7 @@
 
 ## 다음 행동
 
-issue #3이 `dev`에 병합된 상태를 확인한 뒤 issue #4의 요구사항과 README 포인트 충전 계약을 대조한다. `S7-01`의 정확한 대상 파일, 먼저 실패시킬 테스트와 검증 명령을 `docs/IMPLEMENTATION_PLAN.md`에 기록하고 사용자 승인을 받아 `READY`로 전환한다. 승인 전에는 구현 브랜치를 만들지 않는다.
+issue #20의 열린 PR에서 `AGENTS.md` 병합 승인 규칙을 별도 검토하고, 지적 사항이 있으면 같은 브랜치에 반영해 필수 CI를 다시 통과시킨다. 사용자가 해당 PR의 병합을 명시적으로 승인하기 전에는 병합하지 않는다. 병합 후 issue #4의 `S7-01` 작업 상세을 구체화한다.
 
 ## 작업 재개 기준
 
