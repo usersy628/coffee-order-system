@@ -49,7 +49,7 @@
 | [`S5-04`](https://github.com/usersy628/coffee-order-system/issues/20) | `DONE` | `S5-03` | PR 검토와 명시적 병합 승인 workflow 문서화 | PR·CI 후 검토 대기와 사용자 승인 전 병합 금지가 명시됨 |
 | [`S6-01`](https://github.com/usersy628/coffee-order-system/issues/3) | `DONE` | `S5-03` | 메뉴 목록 조회 API와 테스트 | 메뉴 목록 계약·통합 테스트 성공 |
 | [`S6-02`](https://github.com/usersy628/coffee-order-system/issues/22) | `DONE` | `S6-01`, `S5-04` | 메뉴 UTC 시간 매핑과 README 구현 상태 정합성 보완 | MySQL `DATETIME(6)`·`Instant` 정밀도 테스트와 문서 정합성 검증 성공 |
-| [`S7-01`](https://github.com/usersy628/coffee-order-system/issues/4) | `IN_PROGRESS` | `S5-03` | 포인트 충전·이력·멱등성·동시성과 충전 요청 검증 오류 처리 | 실제 MySQL 단일·중복·경합 충전과 `INVALID_CHARGE_AMOUNT` 계약 테스트 성공 |
+| [`S7-01`](https://github.com/usersy628/coffee-order-system/issues/4) | `DONE` | `S5-03` | 포인트 충전·이력·멱등성·동시성과 충전 요청 검증 오류 처리 | 실제 MySQL 단일·중복·경합 충전과 `INVALID_CHARGE_AMOUNT` 계약 테스트 성공 |
 | [`S8-01`](https://github.com/usersy628/coffee-order-system/issues/5) | `BACKLOG` | `S6-01`, `S7-01` | 여러 메뉴 주문·결제·멱등성, 트랜잭션 내 Outbox 저장과 주문 요청 검증 오류 처리 | 실제 MySQL 원자성·중복 요청·동시 주문과 `INVALID_ORDER_REQUEST` 계약 테스트 성공 |
 | [`S9-01`](https://github.com/usersy628/coffee-order-system/issues/6) | `BACKLOG` | `S8-01` | Outbox 게시자와 Mock 데이터 수집 플랫폼 | 2xx 성공, 4xx 즉시 실패, 네트워크·timeout·5xx 최대 5회 재시도, lease·fencing·중복 제거 테스트 성공 |
 | [`S10-01`](https://github.com/usersy628/coffee-order-system/issues/7) | `BACKLOG` | `S8-01` | 최근 168시간 인기 메뉴 TOP 3 조회 | 실제 MySQL 기간 경계·수량·동률 정렬 테스트 성공 |
@@ -65,7 +65,8 @@
 
 ### [`S7-01`](https://github.com/usersy628/coffee-order-system/issues/4) 포인트 충전·이력·멱등성·동시성 구현
 
-- 상태: `IN_PROGRESS`
+- 상태: `DONE`
+- 완료 커밋: `1971658`, `3227271`, `648f225`, `6a1a688`
 - 사용자 승인: 2026-07-14
 - 목적: `POST /api/users/{userId}/points/charges`에서 충전 한도, 지갑과 이력의 원자성, 멱등 결과 재현과 MySQL 비관적 락 기반 동시성 제어를 구현한다.
 - 요구사항 근거:
@@ -103,6 +104,7 @@
   - `src/test/java/com/usersy628/coffeeorder/point/application/PointChargeServiceTest.java`
   - `src/test/java/com/usersy628/coffeeorder/point/infrastructure/PointChargeConcurrencyIntegrationTest.java`
   - `src/test/java/com/usersy628/coffeeorder/global/error/GlobalExceptionHandlerTest.java`
+  - `README.md`
   - `docs/IMPLEMENTATION_PLAN.md`
   - `docs/PROJECT_STATUS.md`
 - 먼저 수행할 테스트 또는 검증:
@@ -120,6 +122,7 @@
   - 명령 트랜잭션 밖 coordinator에서 최초 시도 후 최대 2회, 50ms·100ms와 ±20% jitter로 전체 명령 재시도
   - 이름이 지정된 충전 멱등 유니크 제약 충돌만 전체 롤백 후 새 read-only transaction에서 재현 또는 409 판단
   - UTC `Instant`를 MySQL `DATETIME(6)`으로 저장하고 API 경계에서 `Asia/Seoul` 오프셋으로 변환
+  - README 구현 상태를 포인트 충전 완료와 다음 주문·결제 준비 단계로 갱신
 - 제외 범위:
   - 주문, 포인트 차감, Outbox와 인기 메뉴 구현
   - 외부 결제·PG API와 Redis 분산 락
@@ -134,6 +137,15 @@
   - 오류 body `traceId`와 `X-Trace-Id`, `Idempotency-Replayed` 응답 헤더 계약이 지켜진다.
   - 전체 테스트와 `bootJar`, 필수 CI가 성공한다.
   - PR을 별도 검토와 사용자의 명시적 승인 전까지 병합하지 않는다.
+- 실제 검증 결과:
+  - 구현 전 `PointChargeApiIntegrationTest`는 실제 MySQL 8.4.10에서 `404 ENDPOINT_NOT_FOUND`로 실패하는 RED를 확인했다.
+  - 포인트 API·재시도·동시성 및 기존 회귀를 포함한 전체 테스트 44개가 성공했고 실패·오류·skip은 0개다.
+  - 동일 사용자 100개 충전, 동일 멱등 키 100개 요청, 서로 다른 사용자 병렬 충전, 실제 락 타임아웃과 강제 데드락을 검증했다.
+  - 이력 저장 실패 시 지갑 변경도 롤백되고 UTC 마이크로초 DB 시각과 `+09:00` 응답이 같은 순간인지 검증했다.
+  - `bootJar`와 `git diff --check`가 성공했다.
+- 계획 대비 변경 사항:
+  - 기능 완료 뒤 README 구현 상태가 뒤처지지 않도록 `README.md`를 대상 파일과 구현 범위에 추가했다.
+  - Flyway schema와 seed는 계획대로 변경하지 않았다.
 - 검증 명령:
 
 ```powershell
