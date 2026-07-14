@@ -2,7 +2,7 @@
 
 ## 작업 시작
 
-1. `docs/PROJECT_STATUS.md`에서 현재 작업을 확인하고, `docs/IMPLEMENTATION_PLAN.md`의 해당 작업과 그 작업이 참조하는 `README.md` 섹션을 읽는다. 설계 전체를 검토하거나 변경할 때는 `README.md` 전체를 읽는다.
+1. `docs/PROJECT_STATUS.md`에서 현재 작업을 확인하고, 미완료 작업은 `docs/IMPLEMENTATION_PLAN.md`, 완료 작업은 `docs/IMPLEMENTATION_HISTORY.md`의 해당 상세와 그 작업이 참조하는 `README.md` 섹션을 읽는다. 설계 전체를 검토하거나 변경할 때는 `README.md` 전체를 읽는다.
 2. 이전 대화의 설명만 신뢰하지 말고 다음 명령으로 실제 저장소 상태를 확인한다.
    - `git status --short --branch`
    - `git branch -vv`
@@ -19,9 +19,10 @@
 - 설계 승인이 끝나기 전에는 해당 설계의 구현으로 넘어가지 않는다.
 - 기능 또는 문서 단계별로 작고 의미 있는 커밋을 작업 브랜치에 만든 뒤 원격에 push하고 `dev` 대상 PR로 검토·병합한다.
 - PR 본문에는 대응 이슈를 `Closes #<번호>`로 연결한다.
-- PR을 만들기 전에 `docs/IMPLEMENTATION_PLAN.md`에서 해당 작업에 구체화한 제목부터 검증 명령까지의 작업 상세 전체를 `Implementation Plan 작업 상세` 섹션에 복사한다. 빈 작업 상세 템플릿이나 요약문으로 대체하지 않는다.
+- PR을 만들기 전에 해당 작업의 제목부터 검증 명령까지의 작업 상세 전체를 `Implementation Plan 작업 상세` 섹션에 복사한다. 작업 진행 중에는 `docs/IMPLEMENTATION_PLAN.md`를 사용하고, 같은 PR의 최종 문서 커밋에서 `DONE` 상세를 `docs/IMPLEMENTATION_HISTORY.md`로 옮겼다면 History의 전체 상세를 사용한다. 빈 작업 상세 템플릿이나 요약문으로 대체하지 않는다.
 - 작업 상세 뒤에는 실제 구현 결과, 계획 대비 변경 사항과 실제 검증 명령·결과를 기록한다. 계획 대비 변경이 없으면 `없음`이라고 명시하고, 대상 파일·범위·완료 조건이 달라졌다면 Implementation Plan도 같은 PR에서 먼저 갱신한다.
 - `.github/pull_request_template.md`의 순서와 항목을 사용하며, placeholder를 실제 내용으로 교체한 뒤 `dev` 대상 PR을 만든다. `dev`에 직접 push하지 않는다.
+- GitHub 이슈와 PR의 한글 본문은 UTF-8 파일을 만든 뒤 `gh issue create --body-file`, `gh pr create --body-file` 또는 `gh pr edit --body-file`로 전달한다. 인라인 `--body`와 파이프 입력은 사용하지 않는다. 생성·수정 직후 `gh issue view --json title,body` 또는 `gh pr view --json title,body`로 한글 제목과 예상하지 않은 리터럴 `?` 손실 여부를 확인한다.
 - PR 생성과 필수 CI 성공 후에도 자동 병합하지 않는다. 열린 PR의 URL, 검증 결과와 검토가 필요한 지점을 사용자에게 알리고 검토 대기 상태로 인수인계한다.
 - 열린 PR은 별도 검토자가 검토하고, 지적 사항이 있으면 같은 작업 브랜치에 반영한 뒤 관련 테스트와 필수 CI를 다시 통과시킨다.
 - 사용자가 해당 PR을 명시적으로 병합 승인한 경우에만 `dev`에 병합한다. 구현 요청, `다음 작업 진행` 같은 일반적인 진행 요청, PR 생성 요청이나 CI 성공은 병합 승인으로 해석하지 않는다.
@@ -31,12 +32,13 @@
 
 ## 구현 작업 관리
 
-- 제품 요구사항과 설계의 단일 기준은 `README.md`이다. 구현 계획 문서에 ERD, API 계약 또는 정책을 복사하지 않고 해당 위치를 참조한다.
+- 제품 요구사항과 설계의 단일 기준은 `README.md`이다. 구현 계획과 완료 이력 문서에 ERD, API 계약 또는 정책을 복사하지 않고 해당 위치를 참조한다.
 - 구현은 `docs/IMPLEMENTATION_PLAN.md`에서 `READY`인 작업만 시작한다.
 - 작업을 `READY`로 바꾸기 전에 선행 작업, 수정할 정확한 파일 경로, 먼저 수행할 테스트 또는 검증, 완료 확인 명령을 기록한다.
 - 동시에 `IN_PROGRESS`인 작업은 하나만 둔다.
 - 기능 작업은 가능한 경우 실패하는 테스트를 먼저 확인하고, 구현 후 해당 테스트와 관련 통합 테스트를 통과시킨다.
 - 작업 완료 후 검증 결과를 확인하고 작은 커밋으로 작업 브랜치에 push한 뒤 `dev` 대상 PR을 만든다.
+- 작업을 완료하는 PR의 최종 문서 커밋에서는 해당 상세를 `docs/IMPLEMENTATION_PLAN.md`에서 `docs/IMPLEMENTATION_HISTORY.md`로 옮기고 issue, PR, 완료일, 실제 검증 결과를 기록한다. PR 생성 전에는 merge commit을 `병합 후 기록`으로 두며, 명시적 병합 승인 후 다음 상태 갱신에서 실제 해시로 교체한다.
 
 ## 상태 인수인계
 

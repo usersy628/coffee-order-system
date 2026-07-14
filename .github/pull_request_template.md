@@ -6,8 +6,9 @@ Closes #
 ## Implementation Plan 작업 상세
 
 <!--
-docs/IMPLEMENTATION_PLAN.md에 구체화한 해당 작업의 제목부터 검증 명령까지를
-아래 빈 형식 대신 그대로 복사합니다. 항목을 요약하거나 placeholder를 남기지 않습니다.
+진행 중인 작업은 docs/IMPLEMENTATION_PLAN.md, 같은 PR에서 DONE 상세를 옮긴 작업은
+docs/IMPLEMENTATION_HISTORY.md의 제목부터 검증 명령까지를 아래 빈 형식 대신 그대로
+복사합니다. 항목을 요약하거나 placeholder를 남기지 않습니다.
 -->
 
 ### `[작업 ID]` 작업명
@@ -49,3 +50,8 @@ docs/IMPLEMENTATION_PLAN.md에 구체화한 해당 작업의 제목부터 검증
 <!-- 집중해서 확인할 부분, 남은 위험 또는 후속 작업을 적습니다. 없으면 `없음`이라고 적습니다. -->
 
 - 없음
+
+<!--
+완성한 본문은 UTF-8 파일로 저장해 gh pr create/edit --body-file로 전달합니다.
+생성·수정 직후 gh pr view --json title,body로 한글과 예상하지 않은 리터럴 ? 손실 여부를 확인합니다.
+-->
