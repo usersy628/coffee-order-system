@@ -52,7 +52,7 @@
 | [`S6-01`](https://github.com/usersy628/coffee-order-system/issues/3) | `DONE` | `S5-03` | 메뉴 목록 조회 API와 테스트 | 메뉴 목록 계약·통합 테스트 성공 |
 | [`S6-02`](https://github.com/usersy628/coffee-order-system/issues/22) | `DONE` | `S6-01`, `S5-04` | 메뉴 UTC 시간 매핑과 README 구현 상태 정합성 보완 | MySQL `DATETIME(6)`·`Instant` 정밀도 테스트와 문서 정합성 검증 성공 |
 | [`S7-01`](https://github.com/usersy628/coffee-order-system/issues/4) | `DONE` | `S5-03` | 포인트 충전·이력·멱등성·동시성과 충전 요청 검증 오류 처리 | 실제 MySQL 단일·중복·경합 충전과 `INVALID_CHARGE_AMOUNT` 계약 테스트 성공 |
-| [`S8-01`](https://github.com/usersy628/coffee-order-system/issues/5) | `IN_PROGRESS` | `S6-01`, `S7-01` | 여러 메뉴 주문·결제·멱등성, 트랜잭션 내 Outbox 저장과 주문 요청 검증 오류 처리 | 실제 MySQL 원자성·중복 요청·동시 주문과 `INVALID_ORDER_REQUEST` 계약 테스트 성공 |
+| [`S8-01`](https://github.com/usersy628/coffee-order-system/issues/5) | `DONE` | `S6-01`, `S7-01` | 여러 메뉴 주문·결제·멱등성, 트랜잭션 내 Outbox 저장과 주문 요청 검증 오류 처리 | 실제 MySQL 원자성·중복 요청·동시 주문과 `INVALID_ORDER_REQUEST` 계약 테스트 성공 |
 | [`S9-01`](https://github.com/usersy628/coffee-order-system/issues/6) | `BACKLOG` | `S8-01` | Outbox 게시자와 Mock 데이터 수집 플랫폼 | 2xx 성공, 4xx 즉시 실패, 네트워크·timeout·5xx 최대 5회 재시도, lease·fencing·중복 제거 테스트 성공 |
 | [`S10-01`](https://github.com/usersy628/coffee-order-system/issues/7) | `BACKLOG` | `S8-01` | 최근 168시간 인기 메뉴 TOP 3 조회 | 실제 MySQL 기간 경계·수량·동률 정렬 테스트 성공 |
 | [`S11-01`](https://github.com/usersy628/coffee-order-system/issues/8) | `BACKLOG` | `S6-01`, `S7-01`, `S8-01`, `S9-01`, `S10-01` | 기능 간 동시성·회귀, k6 부하 기준선과 인기 메뉴 `EXPLAIN ANALYZE` 검증 | p95·오류율·DB·락·Outbox 지표와 인덱스·확장 판단 근거 기록 |
@@ -65,89 +65,7 @@
 
 ## 진행 중인 작업 상세
 
-현재 `IN_PROGRESS` 작업은 `S8-01` 하나다.
-
-### [`S8-01`](https://github.com/usersy628/coffee-order-system/issues/5) 여러 메뉴 주문·포인트 결제·멱등성 구현
-
-- 상태: `IN_PROGRESS`
-- 사용자 승인: 2026-07-15
-- 목적: `POST /api/users/{userId}/orders`에서 여러 메뉴 주문, 서버 가격 계산, 포인트 차감, 멱등 결과 재현과 `PENDING` Outbox 저장을 하나의 MySQL 트랜잭션으로 구현한다.
-- 요구사항 근거:
-  - `README.md`의 `핵심 정책 > 주문`, `주문 멱등성`, `Transactional Outbox`
-  - `README.md`의 `API 명세 > 여러 메뉴 주문 및 포인트 결제`
-  - `README.md`의 `동시성 및 트랜잭션 상세 전략 > 주문 및 결제 흐름`, `락 순서, 타임아웃과 재시도`
-  - `README.md`의 `예외 처리와 추적`, `테이블 설계`, `시간 저장 기준`, `테스트 전략`, `주요 오류 정책`
-- 선행 작업: `S6-01`, `S7-01`, `DOC-01` 완료와 PR #26의 `dev` 병합
-- 작업 브랜치: 최신 `dev`에서 `feature/issue-5-order-payment-idempotency` 생성
-- 대상 파일:
-  - `src/main/java/com/usersy628/coffeeorder/order/api/OrderController.java`
-  - `src/main/java/com/usersy628/coffeeorder/order/api/OrderCreateRequest.java`
-  - `src/main/java/com/usersy628/coffeeorder/order/api/OrderCreateResponse.java`
-  - `src/main/java/com/usersy628/coffeeorder/order/application/OrderCommand.java`
-  - `src/main/java/com/usersy628/coffeeorder/order/application/OrderResult.java`
-  - `src/main/java/com/usersy628/coffeeorder/order/application/OrderService.java`
-  - `src/main/java/com/usersy628/coffeeorder/order/application/OrderTransactionExecutor.java`
-  - `src/main/java/com/usersy628/coffeeorder/order/application/OrderReplayReader.java`
-  - `src/main/java/com/usersy628/coffeeorder/order/application/OrderRequestHasher.java`
-  - `src/main/java/com/usersy628/coffeeorder/order/application/OrderRepository.java`
-  - `src/main/java/com/usersy628/coffeeorder/order/application/OrderItemRepository.java`
-  - `src/main/java/com/usersy628/coffeeorder/order/application/OrderEventOutboxRepository.java`
-  - `src/main/java/com/usersy628/coffeeorder/order/domain/Order.java`
-  - `src/main/java/com/usersy628/coffeeorder/order/domain/OrderItem.java`
-  - `src/main/java/com/usersy628/coffeeorder/order/domain/OrderEventOutbox.java`
-  - `src/main/java/com/usersy628/coffeeorder/order/infrastructure/OrderJpaRepository.java`
-  - `src/main/java/com/usersy628/coffeeorder/order/infrastructure/OrderItemJpaRepository.java`
-  - `src/main/java/com/usersy628/coffeeorder/order/infrastructure/OrderEventOutboxJpaRepository.java`
-  - `src/main/java/com/usersy628/coffeeorder/menu/application/MenuQueryRepository.java`
-  - `src/main/java/com/usersy628/coffeeorder/point/domain/PointWallet.java`
-  - `src/main/java/com/usersy628/coffeeorder/point/domain/PointHistory.java`
-  - `src/main/java/com/usersy628/coffeeorder/point/application/PointHistoryRepository.java`
-  - `src/main/java/com/usersy628/coffeeorder/global/error/ErrorCode.java`
-  - `src/main/java/com/usersy628/coffeeorder/global/error/GlobalExceptionHandler.java`
-  - `src/test/java/com/usersy628/coffeeorder/order/api/OrderApiIntegrationTest.java`
-  - `src/test/java/com/usersy628/coffeeorder/order/application/OrderServiceTest.java`
-  - `src/test/java/com/usersy628/coffeeorder/order/infrastructure/OrderConcurrencyIntegrationTest.java`
-  - `README.md`
-  - `docs/IMPLEMENTATION_PLAN.md`
-  - `docs/PROJECT_STATUS.md`
-- 먼저 수행할 테스트 또는 검증:
-  1. 실제 MySQL 통합 테스트에서 유효한 주문 요청이 endpoint 부재로 `404 ENDPOINT_NOT_FOUND`가 되는 RED를 확인한다.
-  2. null item, 필드 누락, 0·음수·`int` 초과, 빈 항목과 중복 메뉴가 `400 INVALID_ORDER_REQUEST`가 되는 계약 테스트를 먼저 작성한다.
-  3. 입력 순서가 다른 동일 요청의 canonical hash·저장·응답·replay·Outbox items 정렬 테스트를 먼저 작성한다.
-  4. 주문·항목·지갑·`USE` 이력·Outbox 중간 실패의 전체 롤백과 동일 사용자 동시 요청 테스트를 작성한다.
-- RED 확인:
-  - 2026-07-15 실제 MySQL 통합 환경에서 `OrderApiIntegrationTest.createsAnOrderWithMultipleMenuItems`가 `201`을 기대했지만 endpoint 부재로 `404 ENDPOINT_NOT_FOUND`를 반환해 실패했다.
-- 구현 범위:
-  - 사용자·멱등 키·주문 항목 검증과 400·404·409·503 오류 계약
-  - 메뉴 DB 가격 계산, 판매 상태 검증과 `menuId` 오름차순 스냅샷 저장
-  - 지갑 선잠금, 포인트 차감, `USE` 이력과 주문 저장의 5초 트랜잭션
-  - 정렬 canonical payload SHA-256과 기존 결과 replay
-  - 명령당 단일 마이크로초 `Instant` 재사용
-  - 주문과 함께 `PENDING` Outbox 한 건 저장
-- 제외 범위:
-  - Outbox claim·lease·fencing·전송·retry·`PUBLISHED`·`FAILED`와 Mock consumer
-  - 메뉴 관리·재고·취소·환불, 외부 PG, 인증 principal 대조
-  - `position` 컬럼, 최대 수량과 최대 항목 수 제한
-- 완료 조건:
-  - 잘못된 주문 입력이 `INVALID_ORDER_REQUEST`로 일관되게 변환된다.
-  - 가격·판매 상태·잔액 검증과 주문 전체 저장이 실제 MySQL에서 원자적이다.
-  - 같은 키·같은 정규화 요청은 최초 응답을 재현하고 다른 요청은 409가 된다.
-  - 저장·응답·replay·Outbox items가 `menuId` 오름차순이며 시각이 같은 마이크로초 순간이다.
-  - 동시 주문에서도 한 번만 차감되고 음수 잔액이 발생하지 않는다.
-  - 전체 테스트, `bootJar`, `git diff --check`와 필수 CI가 성공한다.
-- 검증 명령:
-
-```powershell
-docker info
-.\gradlew.bat test --tests "com.usersy628.coffeeorder.order.api.OrderApiIntegrationTest"
-.\gradlew.bat test --tests "com.usersy628.coffeeorder.order.application.OrderServiceTest"
-.\gradlew.bat test --tests "com.usersy628.coffeeorder.order.infrastructure.OrderConcurrencyIntegrationTest"
-.\gradlew.bat test --tests "com.usersy628.coffeeorder.order.*"
-.\gradlew.bat clean test
-.\gradlew.bat bootJar
-git diff --check
-git status --short
-```
+현재 `IN_PROGRESS` 작업은 없다. `S8-01`의 완료 상세와 실제 검증 결과는 [`IMPLEMENTATION_HISTORY.md`](IMPLEMENTATION_HISTORY.md)에 보존한다.
 
 ## 작업 상세 템플릿
 

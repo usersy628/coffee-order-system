@@ -2,7 +2,7 @@
 
 다중 서버 환경에서 동시성, 데이터 일관성, 장애 복구를 고려하는 커피 주문 시스템 과제입니다.
 
-요구사항 분석, ERD, API 명세, 동시성·트랜잭션·Outbox 상세 전략과 기술 스택 승인을 완료했고, Spring Boot 기본 구조와 MySQL 8.4.10 통합 테스트 기반, 메뉴 목록 조회 및 포인트 충전까지 구현했습니다. 다음 준비 작업은 주문·결제·Outbox 구현 상세 구체화입니다.
+요구사항 분석, ERD, API 명세, 동시성·트랜잭션·Outbox 상세 전략과 기술 스택 승인을 완료했고, Spring Boot 기본 구조와 MySQL 8.4.10 통합 테스트 기반, 메뉴 목록, 포인트 충전 및 주문·결제와 트랜잭션 내 `PENDING` Outbox 저장까지 구현했습니다. 다음 작업은 Outbox 게시자와 Mock 데이터 플랫폼 구현입니다.
 
 ## 설계 목표와 의도
 
@@ -113,7 +113,7 @@ com.usersy628.coffeeorder
 
 순수 헥사고날 구조를 기계적으로 적용하여 모든 클래스에 interface를 만들지는 않습니다. 외부 데이터 플랫폼, 시간, aggregate 저장처럼 교체하거나 격리 테스트할 실제 경계에만 port를 두어 구조적 설명 가능성과 과제 규모를 맞춥니다.
 
-Spring proxy를 우회하는 self-invocation을 막기 위해 충전과 주문의 일시적 DB 충돌 재시도 coordinator, 실제 `@Transactional(timeout = 5)` 명령 executor와 유니크 충돌 후 기존 결과를 읽는 새 read-only transaction reader는 서로 다른 Spring Bean으로 분리합니다. 재시도 coordinator가 실패한 전체 명령을 transaction 밖에서 다시 호출하고, 예외가 발생한 transaction 안에서는 기존 결과를 조회하거나 처리를 계속하지 않습니다. 정확한 클래스명과 경로는 각 기능 이슈를 `READY`로 전환할 때 확정합니다.
+Spring proxy를 우회하는 self-invocation을 막기 위해 충전과 주문의 일시적 DB 충돌 재시도 coordinator와 실제 `@Transactional(timeout = 5)` 명령 executor는 서로 다른 Spring Bean으로 분리합니다. 충전은 유니크 충돌 후 기존 결과를 새 read-only transaction에서 읽고, 주문은 같은 사용자의 요청이 지갑 락에서 직렬화되므로 락을 얻은 transaction 안에서 기존 주문을 current read로 재확인합니다. 재시도 coordinator는 실패한 전체 명령을 transaction 밖에서 다시 호출하며, 예외가 발생한 transaction 안에서는 처리를 계속하지 않습니다.
 
 ### 설정, 초기 데이터와 테스트 구성
 
@@ -161,7 +161,7 @@ Spring proxy를 우회하는 self-invocation을 막기 위해 충전과 주문�
 - 같은 키와 같은 요청이면 새 결제 없이 기존 주문 결과를 반환합니다.
 - 같은 키와 다른 요청이면 `409 Conflict`와 `IDEMPOTENCY_KEY_REUSED` 오류를 반환합니다.
 - 같은 사용자의 주문과 충전은 모두 지갑 행을 먼저 잠근 뒤 멱등 결과를 다시 확인하여 사용자별로 직렬화합니다.
-- 유니크 제약 충돌이 발생하면 예외가 난 트랜잭션에서 조회를 계속하지 않고 전체 롤백 후 새 읽기 전용 트랜잭션에서 기존 결과를 조회합니다.
+- 같은 사용자의 주문은 지갑 락을 먼저 얻은 뒤 기존 주문을 `FOR UPDATE` current read로 재확인하므로 동시 요청도 선행 커밋 결과를 봅니다. `(user_id, idempotency_key)` 유니크 제약은 애플리케이션 순서가 바뀌거나 예상하지 못한 경합이 생길 때의 최종 방어선입니다.
 - 멱등 키의 범위는 `사용자 + API 작업 종류`입니다. 충전과 주문은 서로 다른 테이블에 저장하므로 문자열이 우연히 같아도 서로 충돌하지 않지만, 클라이언트는 모든 변경 요청에 새 UUID를 사용합니다.
 - 주문과 충전의 멱등 키는 각 도메인 테이블에 영구 보관합니다. 실패 결과나 처리 중 상태, 키 만료까지 저장해야 한다면 별도 멱등성 테이블로 확장합니다.
 
@@ -998,7 +998,7 @@ RPS 자체만으로 스케일 아웃하지 않습니다. DB가 병목인데 애�
 
 ## 다음 단계
 
-구현 작업의 상태, 선행 관계, 대상 파일과 검증 기준은 [`docs/IMPLEMENTATION_PLAN.md`](docs/IMPLEMENTATION_PLAN.md)에서 관리합니다. 이 문서는 구현 순서만 관리하며, 요구사항·ERD·API 계약과 기술적 결정의 단일 기준은 계속 `README.md`입니다. Spring Boot 기본 구조, MySQL Testcontainers 기반, 메뉴 목록 조회와 포인트 충전은 완료했으며, 아래 목록은 남은 고수준 마일스톤입니다.
+구현 작업의 상태, 선행 관계, 대상 파일과 검증 기준은 [`docs/IMPLEMENTATION_PLAN.md`](docs/IMPLEMENTATION_PLAN.md)에서 관리합니다. 이 문서는 구현 순서만 관리하며, 요구사항·ERD·API 계약과 기술적 결정의 단일 기준은 계속 `README.md`입니다. Spring Boot 기본 구조, MySQL Testcontainers 기반, 메뉴 목록, 포인트 충전과 주문·결제 및 트랜잭션 내 Outbox 저장은 완료했으며, 아래 목록은 남은 고수준 마일스톤입니다.
 
-1. 주문·결제·Outbox 게시와 Mock 플랫폼 구현 및 테스트
+1. Outbox 게시자와 Mock 데이터 플랫폼 구현 및 테스트
 2. 인기 메뉴 집계, MySQL Testcontainers 회귀·부하 테스트와 제출 문서 완성
