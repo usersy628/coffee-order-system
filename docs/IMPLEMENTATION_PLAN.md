@@ -43,56 +43,108 @@
 
 | ID | 상태 | 선행 작업 | 결과물 | 독립 완료 신호 |
 | --- | --- | --- | --- | --- |
-| `S5-01` | `READY` | 4단계 설계 완료 | 기술 스택·패키지 구조·설정 및 테스트 구성 추천안과 승인 | 선택 사항이 문서화되고 사용자가 승인함 |
-| `S5-02` | `BACKLOG` | `S5-01` | Spring Boot·빌드 도구 기본 구조, traceId·공통 오류 기반과 MySQL Testcontainers 환경 | 기본 컨텍스트·공통 예외 smoke test·MySQL smoke 테스트와 빌드 성공 |
-| `S6-01` | `BACKLOG` | `S5-02` | 메뉴 목록 조회 API와 테스트 | 메뉴 목록 계약·통합 테스트 성공 |
-| `S7-01` | `BACKLOG` | `S5-02` | 포인트 충전·이력·멱등성·동시성 처리 | 실제 MySQL 단일·중복·경합 충전 테스트 성공 |
-| `S8-01` | `BACKLOG` | `S6-01`, `S7-01` | 여러 메뉴 주문·결제·멱등성과 트랜잭션 내 Outbox 저장 | 실제 MySQL 원자성·중복 요청·동시 주문 테스트 성공 |
-| `S9-01` | `BACKLOG` | `S8-01` | Outbox 게시자와 Mock 데이터 수집 플랫폼 | 2xx 성공, 4xx 즉시 실패, 네트워크·timeout·5xx 최대 5회 재시도, lease·fencing·중복 제거 테스트 성공 |
-| `S10-01` | `BACKLOG` | `S8-01` | 최근 168시간 인기 메뉴 TOP 3 조회 | 실제 MySQL 기간 경계·수량·동률 정렬 테스트 성공 |
-| `S11-01` | `BACKLOG` | `S6-01`, `S7-01`, `S8-01`, `S9-01`, `S10-01` | 기능 간 동시성·회귀, k6 부하 기준선과 인기 메뉴 `EXPLAIN ANALYZE` 검증 | p95·오류율·DB·락·Outbox 지표와 인덱스·확장 판단 근거 기록 |
-| `S12-01` | `BACKLOG` | `S6-01`, `S7-01`, `S8-01`, `S9-01`, `S10-01`, `S11-01` | 전역 예외 매핑·traceId·로그와 API 계약 정합성 최종 보강 | 검증·도메인·동시성·예상외 500 응답과 헤더 계약 전체 테스트 성공 |
-| `S13-01` | `BACKLOG` | `S12-01` | README 실행 방법과 구현 근거 보강 | 새 환경에서 문서만으로 실행·테스트 가능 |
-| `S14-01` | `BACKLOG` | `S6-01`, `S7-01`, `S8-01`, `S9-01`, `S10-01`, `S11-01`, `S12-01` | 구현 중 수시 기록한 내용을 정리한 TIL 트러블슈팅 문서 | 문제·원인·해결·검증 근거가 기록됨 |
-| `S15-01` | `BACKLOG` | `S13-01`, `S14-01` | 전체 테스트·보안정보·공개 저장소 제출 검증 | 깨끗한 clone 기준 빌드와 전체 테스트 성공 |
+| [`S5-01`](https://github.com/usersy628/coffee-order-system/issues/1) | `DONE` | 4단계 설계 완료 | 기술 스택·패키지 구조·설정 및 테스트 구성 추천안과 승인 | 선택 사항이 문서화되고 사용자가 승인함 |
+| [`S5-02`](https://github.com/usersy628/coffee-order-system/issues/2) | `READY` | `S5-01` | Spring Boot·빌드 도구 기본 구조, traceId·공통 오류 기반과 MySQL Testcontainers 환경 | 기본 컨텍스트·공통 예외 smoke test·MySQL smoke 테스트와 빌드 성공 |
+| [`S6-01`](https://github.com/usersy628/coffee-order-system/issues/3) | `BACKLOG` | `S5-02` | 메뉴 목록 조회 API와 테스트 | 메뉴 목록 계약·통합 테스트 성공 |
+| [`S7-01`](https://github.com/usersy628/coffee-order-system/issues/4) | `BACKLOG` | `S5-02` | 포인트 충전·이력·멱등성·동시성 처리 | 실제 MySQL 단일·중복·경합 충전 테스트 성공 |
+| [`S8-01`](https://github.com/usersy628/coffee-order-system/issues/5) | `BACKLOG` | `S6-01`, `S7-01` | 여러 메뉴 주문·결제·멱등성과 트랜잭션 내 Outbox 저장 | 실제 MySQL 원자성·중복 요청·동시 주문 테스트 성공 |
+| [`S9-01`](https://github.com/usersy628/coffee-order-system/issues/6) | `BACKLOG` | `S8-01` | Outbox 게시자와 Mock 데이터 수집 플랫폼 | 2xx 성공, 4xx 즉시 실패, 네트워크·timeout·5xx 최대 5회 재시도, lease·fencing·중복 제거 테스트 성공 |
+| [`S10-01`](https://github.com/usersy628/coffee-order-system/issues/7) | `BACKLOG` | `S8-01` | 최근 168시간 인기 메뉴 TOP 3 조회 | 실제 MySQL 기간 경계·수량·동률 정렬 테스트 성공 |
+| [`S11-01`](https://github.com/usersy628/coffee-order-system/issues/8) | `BACKLOG` | `S6-01`, `S7-01`, `S8-01`, `S9-01`, `S10-01` | 기능 간 동시성·회귀, k6 부하 기준선과 인기 메뉴 `EXPLAIN ANALYZE` 검증 | p95·오류율·DB·락·Outbox 지표와 인덱스·확장 판단 근거 기록 |
+| [`S12-01`](https://github.com/usersy628/coffee-order-system/issues/9) | `BACKLOG` | `S6-01`, `S7-01`, `S8-01`, `S9-01`, `S10-01`, `S11-01` | 전역 예외 매핑·traceId·로그와 API 계약 정합성 최종 보강 | 검증·도메인·동시성·예상외 500 응답과 헤더 계약 전체 테스트 성공 |
+| [`S13-01`](https://github.com/usersy628/coffee-order-system/issues/10) | `BACKLOG` | `S12-01` | README 실행 방법과 구현 근거 보강 | 새 환경에서 문서만으로 실행·테스트 가능 |
+| [`S14-01`](https://github.com/usersy628/coffee-order-system/issues/11) | `BACKLOG` | `S6-01`, `S7-01`, `S8-01`, `S9-01`, `S10-01`, `S11-01`, `S12-01` | 구현 중 수시 기록한 내용을 정리한 TIL 트러블슈팅 문서 | 문제·원인·해결·검증 근거가 기록됨 |
+| [`S15-01`](https://github.com/usersy628/coffee-order-system/issues/12) | `BACKLOG` | `S13-01`, `S14-01` | 전체 테스트·보안정보·공개 저장소 제출 검증 | 깨끗한 clone 기준 빌드와 전체 테스트 성공 |
 
 `S9-01`과 `S10-01`은 모두 `S8-01`만 직접 선행하므로 서로 독립적으로 진행할 수 있다. MySQL Testcontainers 기반은 `S5-02`에서 만들고 각 기능 단계에서 사용하며, `S11-01`에서는 도입이 아니라 기능 간 최종 회귀와 부하·실행계획을 검증한다. 공통 오류 응답과 전역 예외 처리의 최소 기반은 `S5-02`에서 만들고, `S12-01`에서 전체 API 계약을 최종 점검한다.
 
 ## 현재 READY 작업
 
-### `S5-01` 기술 스택과 프로젝트 구조 승인
+### [`S5-02`](https://github.com/usersy628/coffee-order-system/issues/2) Spring Boot 기본 구조와 MySQL 통합 테스트 환경 구성
 
-- 목적: Spring Boot 파일을 생성하기 전에 호환 가능한 버전, 의존성, 패키지 경계와 테스트 구성을 결정한다.
-- 요구사항 근거: `README.md`의 `설계 목표와 의도`, `테스트 전략`, `다음 단계`
-- 선행 작업: 2~4단계 설계 완료
-- 결정 항목:
-  - Java와 Spring Boot 버전
-  - Gradle과 Maven 비교를 포함한 빌드 도구 선택 및 버전
-  - Spring Web, Validation, Spring Data JPA 등 기본 의존성
-  - MySQL, Flyway와 Testcontainers 적용 방식
-  - 외부 결제 API 없이 Outbox의 Mock 데이터 수집 플랫폼에만 사용할 HTTP 클라이언트와 테스트 방식
-  - 기본 패키지명과 도메인·애플리케이션·인프라 계층 경계
-  - 로컬·테스트 설정 파일 및 초기 데이터 구성
+- 상태: `READY`
+- 목적: 이후 기능이 공통으로 사용할 실행·DB migration·오류 응답·traceId·시간과 실제 MySQL 테스트 기반을 만든다.
+- 요구사항 근거:
+  - `README.md`의 `기술 스택과 프로젝트 구조`
+  - `README.md`의 `예외 처리와 추적`, `테이블 설계`, `시간 저장 기준`, `테스트 전략`
+- 선행 작업: `S5-01` 완료, GitHub issue #1
+- 작업 브랜치: 최신 `dev`에서 `feature/issue-2-project-bootstrap` 생성
 - 대상 파일:
-  - `README.md`
-  - `docs/IMPLEMENTATION_PLAN.md`
-  - `docs/PROJECT_STATUS.md`
-- 사전 검증:
-  - 추천 버전 간 호환성과 지원 상태를 공식 문서로 확인한다.
-  - 선택이 기존 MySQL·시간·동시성·Outbox·테스트 정책과 충돌하지 않는지 확인한다.
-  - 추천안과 대안을 구분해 사용자에게 먼저 제시한다.
+  - `.gitattributes`
+  - `.gitignore`
+  - `.env.example`
+  - `settings.gradle`
+  - `build.gradle`
+  - `gradlew`
+  - `gradlew.bat`
+  - `gradle/wrapper/gradle-wrapper.jar`
+  - `gradle/wrapper/gradle-wrapper.properties`
+  - `compose.yaml`
+  - `src/main/java/com/usersy628/coffeeorder/CoffeeOrderApplication.java`
+  - `src/main/java/com/usersy628/coffeeorder/global/time/TimeConfig.java`
+  - `src/main/java/com/usersy628/coffeeorder/global/error/ApiErrorResponse.java`
+  - `src/main/java/com/usersy628/coffeeorder/global/error/DomainException.java`
+  - `src/main/java/com/usersy628/coffeeorder/global/error/ErrorCode.java`
+  - `src/main/java/com/usersy628/coffeeorder/global/error/GlobalExceptionHandler.java`
+  - `src/main/java/com/usersy628/coffeeorder/global/trace/TraceIdFilter.java`
+  - `src/main/resources/application.yml`
+  - `src/main/resources/application-local.yml`
+  - `src/main/resources/db/migration/V1__create_schema.sql`
+  - `src/main/resources/db/migration/V2__seed_assignment_data.sql`
+  - `src/test/java/com/usersy628/coffeeorder/CoffeeOrderApplicationTests.java`
+  - `src/test/java/com/usersy628/coffeeorder/global/error/GlobalExceptionHandlerTest.java`
+  - `src/test/java/com/usersy628/coffeeorder/global/trace/TraceIdFilterTest.java`
+  - `src/test/java/com/usersy628/coffeeorder/support/testcontainers/DatabaseSmokeTest.java`
+  - `src/test/java/com/usersy628/coffeeorder/support/testcontainers/MySqlContainerConfiguration.java`
+  - `src/test/java/com/usersy628/coffeeorder/support/testcontainers/MySqlIntegrationTest.java`
+  - `src/test/resources/application-test.yml`
+- 먼저 수행할 테스트 또는 검증:
+  1. `java -version`, `docker version`, `docker compose version`으로 Java 17과 Docker 실행 조건을 확인한다.
+  2. Spring Boot `3.5.16`, Gradle Wrapper `8.14.3`과 승인된 기본 의존성만 포함한 최소 빌드 구조를 만든다.
+  3. `CoffeeOrderApplicationTests`의 context load 테스트를 먼저 실행한다.
+  4. 성공·오류 응답의 `X-Trace-Id`, 오류 body의 `traceId`와 요청 종료 후 MDC 정리를 확인하는 실패 테스트를 작성한 뒤 오류·trace 기반을 구현한다.
+  5. 빈 MySQL `8.4.10` 컨테이너의 Flyway 적용, Hibernate `validate`, seed 사용자별 0P 지갑과 session 락 대기 2초를 확인하는 실패 테스트를 작성한 뒤 설정과 migration을 구현한다.
+- 구현 범위:
+  - Java 17 toolchain, Spring Boot `3.5.16`, Gradle Wrapper `8.14.3` Groovy DSL
+  - Spring Web·Validation·Data JPA·Actuator, MySQL Connector/J, Flyway와 MySQL Testcontainers
+  - Flyway만 사용하는 schema 생성과 과제용 고정 초기 사용자·메뉴·0P 지갑
+  - `Clock.systemUTC()` Bean과 UTC JDBC·Hibernate 설정
+  - `code`, `message`, `details`, `traceId` 오류 body의 최소 구현
+  - 서버 생성 traceId의 MDC·응답 헤더 연결과 요청 종료 시 정리
+  - Hikari 최대 연결 10, 연결 획득 대기 2초, 검증 대기 1초와 MySQL session `innodb_lock_wait_timeout=2`
+  - `@ServiceConnection`을 사용하는 MySQLContainer Spring Bean과 테스트 context당 공유
+  - `@SpringBootTest`, test profile과 `MySqlContainerConfiguration` import를 묶은 `@MySqlIntegrationTest` meta-annotation을 context·DB smoke test에 적용
+- 제외 범위:
+  - 메뉴·포인트·주문·인기 메뉴 API와 Outbox 게시자 구현
+  - Apache HttpClient 5와 WireMock 의존성 추가 및 외부 HTTP 호출
+  - Redis, Kafka, H2, Spring Retry와 WebFlux 도입
+  - 모든 API 예외의 최종 매핑과 로그 계약 완성은 `S12-01`에서 수행
 - 완료 조건:
-  - 사용자가 기술 스택과 패키지 구조를 승인한다.
-  - 승인 내용을 `README.md`에 선택 이유와 함께 반영한다.
-  - `S5-02`에 생성할 정확한 파일 경로, 먼저 실행할 테스트와 검증 명령을 기록하고 `READY`로 변경한다.
+  - 애플리케이션 context가 Java 17과 Gradle Wrapper로 시작한다.
+  - Flyway `V1`, `V2`가 빈 MySQL `8.4.10`에 적용되고 재실행 시 검증에 성공한다.
+  - Hibernate가 schema를 생성하거나 변경하지 않고, 추가되는 JPA mapping에 `validate` 정책이 적용된다.
+  - seed 사용자는 각각 정확히 하나의 0P 지갑을 가진다.
+  - 테스트 연결의 `@@session.innodb_lock_wait_timeout`이 2다.
+  - 공통 오류 body의 `traceId`와 `X-Trace-Id`가 일치하고 내부 예외 정보가 노출되지 않는다.
+  - 성공 응답에도 서버가 생성한 `X-Trace-Id`가 포함되고 요청 종료 후 MDC가 정리된다.
+  - Actuator health endpoint가 `UP`이며 불필요한 endpoint는 외부에 노출되지 않는다.
+  - H2 없이 context·공통 오류·MySQL smoke test와 전체 테스트가 성공한다.
+  - 저장소에 실제 비밀번호나 로컬 `.env`가 포함되지 않는다.
 - 검증 명령:
 
 ```powershell
+docker compose config
+docker info
+.\gradlew.bat --version
+.\gradlew.bat test --tests "com.usersy628.coffeeorder.CoffeeOrderApplicationTests"
+.\gradlew.bat test --tests "com.usersy628.coffeeorder.global.error.GlobalExceptionHandlerTest"
+.\gradlew.bat test --tests "com.usersy628.coffeeorder.global.trace.TraceIdFilterTest"
+.\gradlew.bat test --tests "com.usersy628.coffeeorder.support.testcontainers.DatabaseSmokeTest"
+.\gradlew.bat clean test
+.\gradlew.bat bootJar
 git diff --check
 git status --short
 ```
-
-`S5-01`이 완료되기 전에는 `build.gradle`, `pom.xml`, 빌드 도구 Wrapper 또는 Spring Boot 소스 파일을 생성하지 않는다.
 
 ## 작업 상세 템플릿
 
