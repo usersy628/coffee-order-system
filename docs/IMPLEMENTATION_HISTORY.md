@@ -6,14 +6,81 @@
 
 ## 완료 작업 상세
 
+### [`S9-01`](https://github.com/usersy628/coffee-order-system/issues/6) Outbox 게시자와 Mock 데이터 수집 플랫폼 구현
+
+- 상태: `DONE`
+- issue: [#6](https://github.com/usersy628/coffee-order-system/issues/6) `OPEN`
+- PR: [#28](https://github.com/usersy628/coffee-order-system/pull/28) `OPEN`, 필수 `Build and test` 결과는 PR의 최신 check를 기준으로 확인
+- merge commit: 병합 후 기록
+- 완료일: 2026-07-15
+- 구현 커밋: `3fc13a4` (`feat: add outbox publisher (#6)`), `5b729ac` (`fix: address outbox publisher review findings (#6)`)
+- 목적: 주문 트랜잭션이 저장한 `PENDING` Outbox를 짧은 DB 선점 트랜잭션과 별도 HTTP 전송으로 처리하고, 과제용 Mock 소비자의 영속 중복 제거까지 실제 MySQL과 소켓 장애 테스트로 검증한다.
+- 요구사항 근거:
+  - [`README.md` 외부 데이터 플랫폼 정책](../README.md#외부-데이터-플랫폼)
+  - [`README.md` Outbox 선점·lease·fencing·재시도](../README.md#outbox-상태-전이와-fencing)
+  - [`README.md` Mock 데이터 플랫폼 수신 경계](../README.md#mock-데이터-플랫폼-수신-경계)
+  - [`README.md` 테스트 전략](../README.md#테스트-전략)
+- 선행 작업: `S8-01`이 PR #27로 `dev`에 병합되어 주문·포인트·이력·`PENDING` Outbox 저장이 완료됨
+- 사용자 승인: 2026-07-15. Mock은 같은 애플리케이션의 `local`·`test` 전용 내부 HTTP 수신기로 두고, 게시자는 설정된 base URL의 `POST /internal/mock-data-platform/events`에 원본 payload와 `Idempotency-Key: eventId`를 전송한다. 수신기는 V3의 `event_id` 유니크·payload·`received_at`을 영속화하고 중복은 추가 저장 없이 `200 OK`를 반환한다. WireMock은 실제 HTTP 장애 재현에 사용한다.
+- 작업 브랜치: `feature/issue-6-outbox-publisher`
+- 대상 파일:
+  - `README.md`, `build.gradle`, `src/main/resources/application.yml`, `src/main/resources/application-local.yml`, `src/test/resources/application-test.yml`
+  - `src/main/resources/db/migration/V3__create_mock_data_platform_received_event.sql`
+  - `src/main/java/com/usersy628/coffeeorder/outbox/application/{OutboxPublisher,OutboxClaimTransactionExecutor,OutboxStateTransactionExecutor,OutboxRetryPolicy,OutboxPublisherProperties,DataPlatformClient}.java`
+  - `src/main/java/com/usersy628/coffeeorder/outbox/domain/{ClaimedOutboxEvent,DeliveryResult}.java`
+  - `src/main/java/com/usersy628/coffeeorder/outbox/infrastructure/{OutboxHttpConfiguration,OutboxDeadlineExecutor,ApacheHttpDataPlatformClient,OutboxPublisherScheduler}.java`
+  - `src/main/java/com/usersy628/coffeeorder/mockplatform/{api/MockDataPlatformController,application/MockDataPlatformService,infrastructure/MockDataPlatformJdbcRepository}.java`
+  - `src/test/java/com/usersy628/coffeeorder/outbox/application/{OutboxRetryPolicyTest,OutboxPublisherPropertiesTest,OutboxPublisherIntegrationTest}.java`
+  - `src/test/java/com/usersy628/coffeeorder/outbox/infrastructure/{OutboxClaimIntegrationTest,ApacheHttpDataPlatformClientWireMockTest}.java`
+  - `src/test/java/com/usersy628/coffeeorder/mockplatform/api/{MockDataPlatformApiIntegrationTest,MockDataPlatformProfileTest}.java`
+  - `src/test/java/com/usersy628/coffeeorder/support/testcontainers/DatabaseSmokeTest.java`, `docs/IMPLEMENTATION_PLAN.md`, `docs/IMPLEMENTATION_HISTORY.md`, `docs/PROJECT_STATUS.md`
+- 먼저 수행한 테스트 또는 검증:
+  1. `test` 프로필의 실제 MySQL 통합 테스트에서 `POST /internal/mock-data-platform/events`가 아직 `404 ENDPOINT_NOT_FOUND`가 되는 RED를 확인한다.
+  2. 순수 재시도 정책에서 실패 횟수별 1·2·4·8·16초 기준과 ±20% jitter 범위를 작성한다.
+  3. 실제 MySQL에서 `FOR UPDATE SKIP LOCKED`, due 정렬, batch/worker 제한, lease 회수와 이전 `claim_token`의 모든 상태 갱신 0건을 검증한다.
+  4. 가짜 `DataPlatformClient`로 2xx·4xx·5xx·timeout 상태 전이와 HTTP 호출이 DB 트랜잭션 밖에서 일어나는지 검증한다.
+  5. WireMock으로 URI·원본 JSON·`Idempotency-Key`, 5xx·connection reset·timeout·요청 취소와 HTTP client 내부 재시도 없음(호출 1회)을 검증한다.
+  6. Mock 수신의 첫 저장, 순차·동시 중복 수신, lease 회수 뒤 replay의 `200 OK`와 수집 row 한 건을 실제 MySQL에서 검증한다.
+- RED 확인:
+  - 2026-07-15 실제 MySQL Testcontainers에서 `MockDataPlatformApiIntegrationTest.receivesAnEventAndReturnsOk`가 수신 endpoint 부재로 `200` 기대값에 `404`를 반환해 실패했다.
+- 구현 결과:
+  - V3 `mock_data_platform_received_event` 테이블에 `event_id` 유니크, JSON payload와 `received_at`을 추가하고 `INSERT ... ON DUPLICATE KEY UPDATE`로 최초 payload만 보존했다.
+  - `local`·`test`에서만 내부 Mock endpoint를 노출하고, 누락된 텍스트 `eventId`는 전역 예외 처리 경로를 거치지 않는 명시적 `400`으로 응답했다.
+  - Outbox claim은 `FOR UPDATE SKIP LOCKED`와 `REQUIRES_NEW` 짧은 트랜잭션으로 처리하고, 30초 lease 회수·새 `claim_token`·fencing 조건을 모든 상태 갱신에 적용했다.
+  - 2xx는 `PUBLISHED`, 4xx는 즉시 `FAILED`, 네트워크·timeout·5xx는 지수 백오프와 ±20% jitter로 총 6회까지 재시도한다. `max-attempts`는 DB 상태 제약과 같은 고정 정책이므로 6만 허용해, 값을 낮춰 `PENDING` 행이 영구히 선점되지 않는 경로를 차단했다. lease가 전체 HTTP deadline보다 긴지도 기동 시 검증한다.
+  - Apache HttpClient 5 classic 어댑터는 자동 재시도를 끄고, timeout에서 `HttpPost.cancel()`을 호출한다. deadline worker는 대기열 없는 최대 동시성 수만 두며, 종료 때 `shutdownNow()`로 인터럽트를 요청한 뒤 최대 5초만 기다린다. worker는 daemon으로 만들어 응답하지 않는 I/O가 JVM 종료를 붙잡지 못하게 한다.
+  - scheduler는 기본·test에서 비활성화하고, local에서는 현재 `server.port`를 참조하는 loopback URL을 사용한다. 사용자 로컬 MySQL `3307`과 서버 `18080` 설정은 변경하지 않았다.
+- 제외 범위:
+  - Kafka, Redis, message broker, Spring Retry, WebFlux, H2
+  - 운영자 redrive, 보관·정리 배치, 감사 사유와 전용 관리 API
+  - 실제 외부 데이터 플랫폼 계정·인증·배포, 별도 Mock 애플리케이션·컨테이너·포트
+  - 주문·포인트 API와 S8 저장 로직의 정책 변경, 로컬 MySQL/서버 포트 변경
+- 완료 조건 및 실제 결과:
+  - 주문 트랜잭션 밖 HTTP 호출, 2xx·4xx·retryable 상태 전이, 실제 6회 재시도와 최종 `FAILED`를 통과했다.
+  - 실제 MySQL에서 동시 claim 중복 방지, 잠긴 due 행의 비차단 skip, due 정렬·batch/worker 제한, lease 회수와 fencing을 통과했다.
+  - WireMock 실제 소켓에서 원본 payload·`Idempotency-Key`·호출 1회, 4xx/5xx·connection reset·timeout과 timeout 뒤 deadline worker 해제를 통과했다. deadline executor 종료 시 인터럽트·종료 대기·daemon worker도 검증했다.
+  - Mock endpoint의 local/test 프로필 제한, 첫·순차·동시·lease recovery replay 중복 소비에서 `200 OK`와 row 한 건을 통과했다.
+  - V3 migration smoke test, 전체 테스트 94개 실패·오류·skip 0건, `bootJar`를 통과했다.
+- 계획 대비 변경 사항:
+  - 외부 HTTP 계약과 사용자 승인 정책의 변경은 없다.
+  - 구현 중 검토에서 `RestClient` 경로만으로는 timeout 시 요청 객체 취소를 명시할 수 없다는 점을 확인해, 활성 Plan을 같은 PR에서 direct Apache HttpClient 5 classic 어댑터와 대기열 없는 deadline worker로 갱신했다. 이 변경으로 timeout 후 요청 취소·worker 해제 테스트를 추가했다.
+  - PR #28 검토에서 설정값을 1~5로 낮추면 기존 `PENDING` 행이 영구히 선점되지 않을 수 있고, non-daemon deadline worker가 종료를 지연할 수 있음을 확인했다. 외부 HTTP 계약은 유지한 채 총 6회 정책을 고정하고, deadline executor의 인터럽트·유한 종료 대기·daemon worker를 보강했다.
+- 검증 명령:
+
+```powershell
+.\gradlew.bat test
+.\gradlew.bat bootJar
+git diff --check
+```
+
 ### [`S8-01`](https://github.com/usersy628/coffee-order-system/issues/5) 여러 메뉴 주문·포인트 결제·멱등성 구현
 
 - 상태: `DONE`
 - issue: [#5](https://github.com/usersy628/coffee-order-system/issues/5)
 - PR: [#27](https://github.com/usersy628/coffee-order-system/pull/27)
-- merge commit: `병합 후 기록`
+- merge commit: `d799341`
 - 완료일: 2026-07-15
-- 완료 커밋: `8fb88ff`, `40339ab`, `fad8563`
+- 완료 커밋: `8fb88ff`, `40339ab`, `fad8563`, `063a7d9`, `5f165d1`, `6da0365`, `40143ce`
 - 사용자 승인: 2026-07-15
 - 목적: `POST /api/users/{userId}/orders`에서 여러 메뉴 주문, 서버 가격 계산, 포인트 차감, 멱등 결과 재현과 `PENDING` Outbox 저장을 하나의 MySQL 트랜잭션으로 구현한다.
 - 요구사항 근거:
