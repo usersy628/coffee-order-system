@@ -64,6 +64,8 @@ class PointChargeConcurrencyIntegrationTest {
 	@AfterEach
 	void tearDown() {
 		executorService.shutdownNow();
+		jdbcTemplate.update("DELETE FROM point_history");
+		jdbcTemplate.update("UPDATE point_wallet SET balance = 0, updated_at = UTC_TIMESTAMP(6)");
 	}
 
 	@Test

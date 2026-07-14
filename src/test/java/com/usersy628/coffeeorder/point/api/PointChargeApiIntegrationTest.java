@@ -13,6 +13,7 @@ import java.time.OffsetDateTime;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.usersy628.coffeeorder.support.testcontainers.MySqlIntegrationTest;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -39,6 +40,11 @@ class PointChargeApiIntegrationTest {
 	void resetPointData() {
 		jdbcTemplate.update("DELETE FROM point_history");
 		jdbcTemplate.update("UPDATE point_wallet SET balance = 0, updated_at = UTC_TIMESTAMP(6)");
+	}
+
+	@AfterEach
+	void restorePointData() {
+		resetPointData();
 	}
 
 	@Test
