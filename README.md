@@ -94,13 +94,17 @@ com.usersy628.coffeeorder
 │   ├── api
 │   ├── application
 │   └── infrastructure
-└── outbox
+├── outbox
     ├── application
     ├── domain
     └── infrastructure
         ├── http
         ├── persistence
         └── scheduling
+└── mockplatform
+    ├── api
+    ├── application
+    └── infrastructure
 ```
 
 각 기능은 필요한 계층만 만들며 빈 package를 미리 생성하지 않습니다.
@@ -175,6 +179,10 @@ Spring proxy를 우회하는 self-invocation을 막기 위해 충전과 주문�
 - 2xx는 이벤트 전송 성공으로 처리하지만 주문 성공 조건에는 영향을 주지 않습니다.
 - 네트워크 오류, timeout과 5xx는 지수 백오프와 jitter로 최초 실패 후 최대 5회 재시도합니다. 최초 전송을 포함한 최대 시도 횟수는 6회입니다.
 - 과제용 Mock 계약에서는 4xx를 요청 데이터 오류로 보고 즉시 `FAILED`로 전환합니다. 실제 플랫폼 계약이 생기면 408·429 같은 재시도 가능 응답을 별도로 분류합니다.
+- 과제용 Mock 데이터 플랫폼은 같은 Spring Boot 애플리케이션 안의 내부 HTTP 수신기이며 `local`, `test` 프로필에서만 활성화합니다. 공개 클라이언트 API가 아니므로 `/api` 경로 아래에 두지 않습니다.
+- 게시자는 설정된 base URL의 `POST /internal/mock-data-platform/events`로 Outbox의 변경되지 않은 JSON payload와 `Idempotency-Key: eventId`를 전송합니다.
+- Mock 수신기는 V3의 `mock_data_platform_received_event`에 `event_id` 유니크, 수신 payload와 `received_at`을 하나의 트랜잭션으로 저장합니다. 같은 `eventId`는 기존 수집 결과를 유지한 채 `200 OK`를 반환합니다.
+- 기본 프로필에서는 게시 스케줄러를 비활성화합니다. `local`은 현재 서버 포트를 가리키는 loopback base URL로 활성화하고, 그 밖의 환경에서 게시자를 켜려면 실제 데이터 플랫폼 base URL을 명시해야 합니다. URL 없이 활성화하면 시작 시 실패시켜 의도하지 않은 self-call을 막습니다.
 
 ### 인기 메뉴
 
@@ -515,6 +523,7 @@ erDiagram
     MENU ||--o{ ORDER_ITEM : referenced_by
     ORDERS o|--|| POINT_HISTORY : creates_use_history
     ORDERS ||--|| ORDER_EVENT_OUTBOX : emits
+    ORDER_EVENT_OUTBOX ||--o| MOCK_DATA_PLATFORM_RECEIVED_EVENT : delivers
 
     USERS {
         BIGINT id PK
@@ -585,6 +594,13 @@ erDiagram
         DATETIME failed_at
         VARCHAR last_error
         DATETIME created_at
+    }
+
+    MOCK_DATA_PLATFORM_RECEIVED_EVENT {
+        BIGINT id PK
+        CHAR event_id UK
+        JSON payload
+        DATETIME received_at
     }
 ```
 
@@ -732,6 +748,18 @@ CHECK (
 
 `UNIQUE (order_id, event_type)`은 현재 주문마다 `ORDER_COMPLETED` 이벤트가 하나뿐이라는 정책에 맞습니다. 향후 같은 주문에서 동일 타입의 이벤트를 여러 번 발행해야 한다면 aggregate version을 추가하고 이 제약을 확장합니다.
 
+### `mock_data_platform_received_event`
+
+| 컬럼 | 타입 | 제약 | 설명 |
+| --- | --- | --- | --- |
+| `id` | `BIGINT` | PK | Mock 수집 기록 식별자 |
+| `event_id` | `CHAR(36)` | UNIQUE, NOT NULL | 소비자 중복 제거 식별자 |
+| `payload` | `JSON` | NOT NULL | 최초 수신한 이벤트 전문 |
+| `received_at` | `DATETIME(6)` | NOT NULL | Mock 플랫폼 수신 시각 |
+
+- 이 테이블은 과제용 Mock의 중복 제거 기록과 수집 데이터 반영을 함께 보존합니다. 별도 FK를 두지 않아 Mock 소비자가 Outbox 내부 식별자나 주문 테이블에 결합하지 않습니다.
+- `event_id`가 이미 있으면 기존 row를 변경하지 않습니다. 따라서 게시자가 수신 직후 종료되어 재전송해도 수집 데이터가 한 번만 반영됩니다.
+
 이벤트 payload는 생성 후 변경하지 않으며 모든 재시도에서 같은 `eventId`와 내용을 전송합니다.
 
 ```json
@@ -780,6 +808,13 @@ FOR UPDATE SKIP LOCKED;
 `:claim_limit`은 설정된 배치 크기와 현재 즉시 실행 가능한 worker 슬롯 수 중 작은 값입니다. 선점 트랜잭션에서 `PROCESSING`으로 변경하고 `attempt_count`를 1 증가시키며 `next_attempt_at`을 비우고 `locked_at`과 매번 새로운 `claim_token`을 기록합니다. 이 시점의 attempt는 네트워크 호출 완료가 아니라 전송 단계에 진입한 횟수이며, 프로세스가 호출 직전에 종료되어도 보수적으로 retry budget을 소비합니다. 트랜잭션을 커밋한 후에만 데이터 수집 플랫폼을 호출합니다.
 
 외부 플랫폼이 이벤트를 수신한 직후 게시자가 종료되면 같은 이벤트가 다시 전송될 수 있습니다. 따라서 게시자는 매번 같은 `event_id`를 사용하고, 외부 API가 멱등 헤더를 지원하면 같은 값을 `Idempotency-Key`로 전달합니다. Mock API 테스트에서도 소비자의 중복 제거를 검증합니다.
+
+### Mock 데이터 플랫폼 수신 경계
+
+- 내부 수신 URI는 `POST /internal/mock-data-platform/events`이고, 본문은 Outbox에 저장된 `ORDER_COMPLETED` JSON payload 그대로입니다. 수신기는 `eventId`를 중복 제거 키로 사용하며 요청 헤더의 `Idempotency-Key`는 게시자가 같은 값을 보냈는지 HTTP adapter 테스트로 검증합니다.
+- Controller는 `local`과 `test` 프로필에서만 등록합니다. `local`에서는 현재 실행 서버의 loopback URL을 base URL로 사용하므로 별도 Mock 프로세스·컨테이너·포트가 필요하지 않습니다. 이 선택은 실제 HTTP 요청과 수신 DB 트랜잭션은 유지하면서 과제의 기동 복잡도를 낮춥니다.
+- `test` 프로필에서는 scheduler를 끄고 테스트가 `publishDueEvents()`를 직접 호출합니다. Mock receiver의 영속 중복 제거는 MySQL 통합 테스트로, timeout·5xx·연결 장애와 adapter의 숨은 재시도 없음은 WireMock 실제 소켓 테스트로 분리합니다.
+- default 등 non-local/test 환경에서 scheduler를 활성화하려면 `coffee-order.outbox.publisher.data-platform-base-url`을 비어 있지 않게 설정해야 합니다. 이 조건은 애플리케이션 시작 시 검증합니다.
 
 ### Outbox 상태 전이와 fencing
 
@@ -862,6 +897,7 @@ WHERE id = :id
 | `order_event_outbox` | `UNIQUE (order_id, event_type)` | 주문 이벤트 중복 생성 방지 |
 | `order_event_outbox` | `INDEX (status, next_attempt_at)` | 전송 대상 배치 조회 |
 | `order_event_outbox` | `INDEX (status, locked_at)` | 만료된 `PROCESSING` 이벤트 회수 |
+| `mock_data_platform_received_event` | `UNIQUE (event_id)` | Mock 소비자 중복 제거와 최초 수집 payload 보존 |
 
 InnoDB 보조 인덱스 리프에는 PK가 암묵적으로 포함되므로 마지막 `id`를 반복해서 선언하지 않습니다. Outbox 선점도 `ORDER BY next_attempt_at, id`로 인덱스 순서와 맞춥니다. 현재 `orders.status`는 항상 `PAID`이므로 선택도가 없는 `status`를 선두에 두지 않으며, 취소 등 다른 상태가 추가되면 `(status, paid_at)`을 다시 검토합니다.
 

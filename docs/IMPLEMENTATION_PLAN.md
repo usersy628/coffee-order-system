@@ -53,7 +53,7 @@
 | [`S6-02`](https://github.com/usersy628/coffee-order-system/issues/22) | `DONE` | `S6-01`, `S5-04` | 메뉴 UTC 시간 매핑과 README 구현 상태 정합성 보완 | MySQL `DATETIME(6)`·`Instant` 정밀도 테스트와 문서 정합성 검증 성공 |
 | [`S7-01`](https://github.com/usersy628/coffee-order-system/issues/4) | `DONE` | `S5-03` | 포인트 충전·이력·멱등성·동시성과 충전 요청 검증 오류 처리 | 실제 MySQL 단일·중복·경합 충전과 `INVALID_CHARGE_AMOUNT` 계약 테스트 성공 |
 | [`S8-01`](https://github.com/usersy628/coffee-order-system/issues/5) | `DONE` | `S6-01`, `S7-01` | 여러 메뉴 주문·결제·멱등성, 트랜잭션 내 Outbox 저장과 주문 요청 검증 오류 처리 | 실제 MySQL 원자성·중복 요청·동시 주문과 `INVALID_ORDER_REQUEST` 계약 테스트 성공 |
-| [`S9-01`](https://github.com/usersy628/coffee-order-system/issues/6) | `BACKLOG` | `S8-01` | Outbox 게시자와 Mock 데이터 수집 플랫폼 | 2xx 성공, 4xx 즉시 실패, 네트워크·timeout·5xx 최대 5회 재시도, lease·fencing·중복 제거 테스트 성공 |
+| [`S9-01`](https://github.com/usersy628/coffee-order-system/issues/6) | `READY` | `S8-01` | Outbox 게시자와 Mock 데이터 수집 플랫폼 | 2xx 성공, 4xx 즉시 실패, 네트워크·timeout·5xx 최대 5회 재시도, lease·fencing·중복 제거 테스트 성공 |
 | [`S10-01`](https://github.com/usersy628/coffee-order-system/issues/7) | `BACKLOG` | `S8-01` | 최근 168시간 인기 메뉴 TOP 3 조회 | 실제 MySQL 기간 경계·수량·동률 정렬 테스트 성공 |
 | [`S11-01`](https://github.com/usersy628/coffee-order-system/issues/8) | `BACKLOG` | `S6-01`, `S7-01`, `S8-01`, `S9-01`, `S10-01` | 기능 간 동시성·회귀, k6 부하 기준선과 인기 메뉴 `EXPLAIN ANALYZE` 검증 | p95·오류율·DB·락·Outbox 지표와 인덱스·확장 판단 근거 기록 |
 | [`S12-01`](https://github.com/usersy628/coffee-order-system/issues/9) | `BACKLOG` | `S6-01`, `S7-01`, `S8-01`, `S9-01`, `S10-01`, `S11-01` | 전역 예외 매핑·traceId·로그와 API 계약 정합성 최종 보강 | 검증·도메인·동시성·예상외 500 응답과 헤더 계약 전체 테스트 성공 |
@@ -66,6 +66,87 @@
 ## 진행 중인 작업 상세
 
 현재 `IN_PROGRESS` 작업은 없다. `S8-01`의 완료 상세와 실제 검증 결과는 [`IMPLEMENTATION_HISTORY.md`](IMPLEMENTATION_HISTORY.md)에 보존한다.
+
+### [`S9-01`](https://github.com/usersy628/coffee-order-system/issues/6) Outbox 게시자와 Mock 데이터 수집 플랫폼 구현
+
+- 상태: `READY`
+- 목적: 주문 트랜잭션이 저장한 `PENDING` Outbox를 짧은 DB 선점 트랜잭션과 별도 HTTP 전송으로 처리하고, 과제용 Mock 소비자의 영속 중복 제거까지 실제 MySQL과 소켓 장애 테스트로 검증한다.
+- 요구사항 근거:
+  - [`README.md` 외부 데이터 플랫폼 정책](../README.md#외부-데이터-플랫폼)
+  - [`README.md` Outbox 선점·lease·fencing·재시도](../README.md#outbox-상태-전이와-fencing)
+  - [`README.md` Mock 데이터 플랫폼 수신 경계](../README.md#mock-데이터-플랫폼-수신-경계)
+  - [`README.md` 테스트 전략](../README.md#테스트-전략)
+- 선행 작업: `S8-01`이 PR #27로 `dev`에 병합되어 주문·포인트·이력·`PENDING` Outbox 저장이 완료됨
+- 사용자 승인: 2026-07-15. Mock은 같은 애플리케이션의 `local`·`test` 전용 내부 HTTP 수신기로 두고, 게시자는 설정된 base URL의 `POST /internal/mock-data-platform/events`에 원본 payload와 `Idempotency-Key: eventId`를 전송한다. 수신기는 V3의 `event_id` 유니크·payload·`received_at`을 영속화하고 중복은 추가 저장 없이 `200 OK`를 반환한다. WireMock은 실제 HTTP 장애 재현에 사용한다.
+- 작업 브랜치: `feature/issue-6-outbox-publisher`
+- 대상 파일:
+  - `README.md`
+  - `build.gradle`
+  - `src/main/resources/application.yml`
+  - `src/main/resources/application-local.yml`
+  - `src/test/resources/application-test.yml`
+  - `src/main/resources/db/migration/V3__create_mock_data_platform_received_event.sql`
+  - `src/main/java/com/usersy628/coffeeorder/outbox/application/OutboxPublisher.java`
+  - `src/main/java/com/usersy628/coffeeorder/outbox/application/OutboxClaimTransactionExecutor.java`
+  - `src/main/java/com/usersy628/coffeeorder/outbox/application/OutboxStateTransactionExecutor.java`
+  - `src/main/java/com/usersy628/coffeeorder/outbox/application/OutboxRetryPolicy.java`
+  - `src/main/java/com/usersy628/coffeeorder/outbox/application/OutboxPublisherProperties.java`
+  - `src/main/java/com/usersy628/coffeeorder/outbox/application/DataPlatformClient.java`
+  - `src/main/java/com/usersy628/coffeeorder/outbox/domain/ClaimedOutboxEvent.java`
+  - `src/main/java/com/usersy628/coffeeorder/outbox/domain/DeliveryResult.java`
+  - `src/main/java/com/usersy628/coffeeorder/outbox/infrastructure/OutboxHttpConfiguration.java`
+  - `src/main/java/com/usersy628/coffeeorder/outbox/infrastructure/RestClientDataPlatformClient.java`
+  - `src/main/java/com/usersy628/coffeeorder/outbox/infrastructure/OutboxPublisherScheduler.java`
+  - `src/main/java/com/usersy628/coffeeorder/mockplatform/api/MockDataPlatformController.java`
+  - `src/main/java/com/usersy628/coffeeorder/mockplatform/application/MockDataPlatformService.java`
+  - `src/main/java/com/usersy628/coffeeorder/mockplatform/infrastructure/MockDataPlatformJdbcRepository.java`
+  - `src/test/java/com/usersy628/coffeeorder/outbox/application/OutboxRetryPolicyTest.java`
+  - `src/test/java/com/usersy628/coffeeorder/outbox/application/OutboxPublisherIntegrationTest.java`
+  - `src/test/java/com/usersy628/coffeeorder/outbox/infrastructure/OutboxClaimIntegrationTest.java`
+  - `src/test/java/com/usersy628/coffeeorder/outbox/infrastructure/RestClientDataPlatformClientWireMockTest.java`
+  - `src/test/java/com/usersy628/coffeeorder/mockplatform/api/MockDataPlatformApiIntegrationTest.java`
+  - `src/test/java/com/usersy628/coffeeorder/support/testcontainers/DatabaseSmokeTest.java`
+  - `docs/IMPLEMENTATION_PLAN.md`
+  - `docs/IMPLEMENTATION_HISTORY.md`
+  - `docs/PROJECT_STATUS.md`
+- 먼저 수행할 테스트 또는 검증:
+  1. `test` 프로필의 실제 MySQL 통합 테스트에서 `POST /internal/mock-data-platform/events`가 아직 `404 ENDPOINT_NOT_FOUND`가 되는 RED를 확인한다.
+  2. 순수 재시도 정책 테스트에서 실패 횟수별 1·2·4·8·16초 기준과 ±20% jitter 범위를 먼저 작성한다.
+  3. 실제 MySQL에서 두 worker의 `FOR UPDATE SKIP LOCKED` claim ID 교집합이 없고, 만료 lease 회수와 이전 `claim_token`의 상태 갱신 0건을 검증하는 테스트를 작성한다.
+  4. 가짜 `DataPlatformClient`로 2xx·4xx·5xx·timeout 상태 전이와 HTTP 호출이 DB 트랜잭션 밖에서 일어나는지 검증한다.
+  5. WireMock으로 URI·원본 JSON·`Idempotency-Key`, 5xx·connection reset·timeout과 HTTP client 내부 재시도 없음(호출 1회)을 검증한다.
+  6. Mock 수신의 첫 저장, 순차·동시 중복 수신의 `200 OK`와 수집 row 한 건을 실제 MySQL에서 검증한다.
+- RED 확인:
+  - `MockDataPlatformApiIntegrationTest.receivesAnEventAndReturnsOk`가 수신 endpoint 부재로 `404 ENDPOINT_NOT_FOUND`를 반환하는 상태를 먼저 확인한다.
+- 구현 범위:
+  - Apache HttpClient 5 기반 `RestClient` adapter와 WireMock 3.x 테스트 의존성 추가
+  - Outbox가 소유하는 6회 시도·지수 백오프·±20% jitter와 HTTP 응답 분류
+  - `FOR UPDATE SKIP LOCKED` claim, 30초 lease 회수, `claim_token` fencing과 DB UTC 상태 갱신
+  - 게시 주기 1초, batch 10, 인스턴스별 외부 호출 동시성 10, 전체 HTTP deadline 5초를 외부 설정으로 분리
+  - `local`·`test` 전용 Mock Controller, V3 수신 테이블의 `event_id` 유니크·payload·`received_at`과 중복 `200 OK`
+  - test 프로필 scheduler 비활성화, local loopback base URL, 다른 환경의 명시 URL 검증
+  - MySQL Testcontainers, MockMvc와 WireMock으로 Outbox 상태·HTTP·중복 소비를 분리 검증
+- 제외 범위:
+  - Kafka, Redis, message broker, Spring Retry, WebFlux, H2
+  - 운영자 redrive, 보관·정리 배치, 감사 사유와 전용 관리 API
+  - 실제 외부 데이터 플랫폼 계정·인증·배포, 별도 Mock 애플리케이션·컨테이너·포트
+  - 주문·포인트 API와 S8 저장 로직의 정책 변경, 로컬 MySQL/서버 포트 변경
+- 완료 조건:
+  - 주문 트랜잭션 밖에서만 HTTP 호출하며 2xx는 `PUBLISHED`, 4xx는 즉시 `FAILED`, 네트워크·timeout·5xx는 6번째 시도까지 Outbox만 재시도한다.
+  - 실제 MySQL에서 claim 중복이 없고 due 정렬·batch/worker 제한·lease 회수·모든 fencing 갱신 조건이 지켜진다.
+  - `Idempotency-Key: eventId`, 원본 payload와 시도당 HTTP 한 번이 WireMock 실제 소켓 테스트에서 검증된다.
+  - Mock 수신기는 `local`·`test`에서만 노출되고 `eventId`가 같은 이벤트를 여러 번 받아도 row 하나와 `200 OK`를 유지한다.
+  - V3 migration, 전체 테스트, `bootJar`, `git diff --check`와 필수 CI가 성공한다.
+  - PR은 별도 검토와 사용자의 명시적 승인 전까지 병합하지 않는다.
+- 검증 명령:
+
+```powershell
+.\gradlew.bat test --tests "com.usersy628.coffeeorder.mockplatform.api.MockDataPlatformApiIntegrationTest"
+.\gradlew.bat test --tests "com.usersy628.coffeeorder.outbox.*"
+.\gradlew.bat clean test
+.\gradlew.bat bootJar
+git diff --check
+```
 
 ## 작업 상세 템플릿
 
