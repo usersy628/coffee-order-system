@@ -1,6 +1,6 @@
 package com.usersy628.coffeeorder.menu.domain;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -30,10 +30,10 @@ public class Menu {
 	private MenuStatus status;
 
 	@Column(name = "created_at", nullable = false, updatable = false)
-	private LocalDateTime createdAt;
+	private Instant createdAt;
 
 	@Column(name = "updated_at", nullable = false)
-	private LocalDateTime updatedAt;
+	private Instant updatedAt;
 
 	protected Menu() {
 	}
