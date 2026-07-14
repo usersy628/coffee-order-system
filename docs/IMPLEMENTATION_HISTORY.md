@@ -9,9 +9,9 @@
 ### [`S10-01`](https://github.com/usersy628/coffee-order-system/issues/7) 최근 168시간 인기 메뉴 TOP 3 조회
 
 - 상태: `DONE`
-- issue: [#7](https://github.com/usersy628/coffee-order-system/issues/7) `OPEN`
-- PR: [#29](https://github.com/usersy628/coffee-order-system/pull/29) `OPEN`
-- merge commit: 병합 후 기록
+- issue: [#7](https://github.com/usersy628/coffee-order-system/issues/7) `CLOSED`
+- PR: [#29](https://github.com/usersy628/coffee-order-system/pull/29) `MERGED`
+- merge commit: `c2243a6` (`Merge pull request #29 from usersy628/feature/issue-7-popular-menu-top3`)
 - 완료일: 2026-07-15
 - 구현 커밋: `5724012` (`feat: add popular menu top three query (#7)`)
 - 목적: 조회 시각부터 정확히 168시간의 완료 주문을 MySQL 원본 데이터로 직접 집계하여 `GET /api/menus/popular`에서 최대 3개 인기 메뉴와 같은 조회 경계를 반환한다.
