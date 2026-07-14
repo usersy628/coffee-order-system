@@ -45,9 +45,10 @@
 | --- | --- | --- | --- | --- |
 | [`S5-01`](https://github.com/usersy628/coffee-order-system/issues/1) | `DONE` | 4단계 설계 완료 | 기술 스택·패키지 구조·설정 및 테스트 구성 추천안과 승인 | 선택 사항이 문서화되고 사용자가 승인함 |
 | [`S5-02`](https://github.com/usersy628/coffee-order-system/issues/2) | `DONE` | `S5-01` | Spring Boot·빌드 도구 기본 구조, traceId·공통 오류 기반과 MySQL Testcontainers 환경 | 기본 컨텍스트·공통 예외 smoke test·MySQL smoke 테스트와 빌드 성공 |
-| [`S6-01`](https://github.com/usersy628/coffee-order-system/issues/3) | `READY` | `S5-02` | 메뉴 목록 조회 API와 테스트 | 메뉴 목록 계약·통합 테스트 성공 |
-| [`S7-01`](https://github.com/usersy628/coffee-order-system/issues/4) | `BACKLOG` | `S5-02` | 포인트 충전·이력·멱등성·동시성 처리 | 실제 MySQL 단일·중복·경합 충전 테스트 성공 |
-| [`S8-01`](https://github.com/usersy628/coffee-order-system/issues/5) | `BACKLOG` | `S6-01`, `S7-01` | 여러 메뉴 주문·결제·멱등성과 트랜잭션 내 Outbox 저장 | 실제 MySQL 원자성·중복 요청·동시 주문 테스트 성공 |
+| [`S5-03`](https://github.com/usersy628/coffee-order-system/issues/17) | `DONE` | `S5-02` | 리뷰 후속 공통 MVC 오류·Flyway 재실행 검증·PR CI 기반 보완 | 4xx 계약·migration 재실행·GitHub Actions 검증 성공 |
+| [`S6-01`](https://github.com/usersy628/coffee-order-system/issues/3) | `READY` | `S5-03` | 메뉴 목록 조회 API와 테스트 | 메뉴 목록 계약·통합 테스트 성공 |
+| [`S7-01`](https://github.com/usersy628/coffee-order-system/issues/4) | `BACKLOG` | `S5-03` | 포인트 충전·이력·멱등성·동시성과 충전 요청 검증 오류 처리 | 실제 MySQL 단일·중복·경합 충전과 `INVALID_CHARGE_AMOUNT` 계약 테스트 성공 |
+| [`S8-01`](https://github.com/usersy628/coffee-order-system/issues/5) | `BACKLOG` | `S6-01`, `S7-01` | 여러 메뉴 주문·결제·멱등성, 트랜잭션 내 Outbox 저장과 주문 요청 검증 오류 처리 | 실제 MySQL 원자성·중복 요청·동시 주문과 `INVALID_ORDER_REQUEST` 계약 테스트 성공 |
 | [`S9-01`](https://github.com/usersy628/coffee-order-system/issues/6) | `BACKLOG` | `S8-01` | Outbox 게시자와 Mock 데이터 수집 플랫폼 | 2xx 성공, 4xx 즉시 실패, 네트워크·timeout·5xx 최대 5회 재시도, lease·fencing·중복 제거 테스트 성공 |
 | [`S10-01`](https://github.com/usersy628/coffee-order-system/issues/7) | `BACKLOG` | `S8-01` | 최근 168시간 인기 메뉴 TOP 3 조회 | 실제 MySQL 기간 경계·수량·동률 정렬 테스트 성공 |
 | [`S11-01`](https://github.com/usersy628/coffee-order-system/issues/8) | `BACKLOG` | `S6-01`, `S7-01`, `S8-01`, `S9-01`, `S10-01` | 기능 간 동시성·회귀, k6 부하 기준선과 인기 메뉴 `EXPLAIN ANALYZE` 검증 | p95·오류율·DB·락·Outbox 지표와 인덱스·확장 판단 근거 기록 |
@@ -56,7 +57,71 @@
 | [`S14-01`](https://github.com/usersy628/coffee-order-system/issues/11) | `BACKLOG` | `S6-01`, `S7-01`, `S8-01`, `S9-01`, `S10-01`, `S11-01`, `S12-01` | 구현 중 수시 기록한 내용을 정리한 TIL 트러블슈팅 문서 | 문제·원인·해결·검증 근거가 기록됨 |
 | [`S15-01`](https://github.com/usersy628/coffee-order-system/issues/12) | `BACKLOG` | `S13-01`, `S14-01` | 전체 테스트·보안정보·공개 저장소 제출 검증 | 깨끗한 clone 기준 빌드와 전체 테스트 성공 |
 
-`S9-01`과 `S10-01`은 모두 `S8-01`만 직접 선행하므로 서로 독립적으로 진행할 수 있다. MySQL Testcontainers 기반은 `S5-02`에서 만들고 각 기능 단계에서 사용하며, `S11-01`에서는 도입이 아니라 기능 간 최종 회귀와 부하·실행계획을 검증한다. 공통 오류 응답과 전역 예외 처리의 최소 기반은 `S5-02`에서 만들고, `S12-01`에서 전체 API 계약을 최종 점검한다.
+`S9-01`과 `S10-01`은 모두 `S8-01`만 직접 선행하므로 서로 독립적으로 진행할 수 있다. MySQL Testcontainers 기반은 `S5-02`에서 만들고 `S5-03`에서 migration 재실행 검증을 보강한 뒤 각 기능 단계에서 사용하며, `S11-01`에서는 도입이 아니라 기능 간 최종 회귀와 부하·실행계획을 검증한다. 공통 MVC 전송 오류는 `S5-03`, 충전과 주문의 `MethodArgumentNotValidException`은 각각 `S7-01`과 `S8-01`에서 기능별 오류 코드로 구현하고, `S12-01`에서는 전체 API 오류·traceId·로그 계약의 최종 회귀와 누락을 점검한다.
+
+## 최근 완료 작업
+
+### [`S5-03`](https://github.com/usersy628/coffee-order-system/issues/17) 리뷰 후속 기반 검증 보완
+
+- 상태: `DONE`
+- 완료 커밋: `a3fecab`, `45612f5`, `0319638`, `e018bf8`
+- 목적: PR #13, #14, #16 리뷰에서 확인된 공통 MVC 예외 오분류, Flyway 재실행 검증 공백과 PR 자동 검증 부재를 후속 기능 구현 전에 보완한다.
+- 요구사항 근거:
+  - `README.md`의 `API 명세 > 공통 규칙`
+  - `README.md`의 `예외 처리와 추적`
+  - `README.md`의 `테스트 전략`
+  - `README.md`의 `주요 오류 정책`
+- 선행 작업: `S5-02` 완료와 issue #2의 `dev` 병합
+- 작업 브랜치: 최신 `dev`에서 `feature/issue-17-foundation-review-fixes` 생성
+- 대상 파일:
+  - `src/main/java/com/usersy628/coffeeorder/global/error/ErrorCode.java`
+  - `src/main/java/com/usersy628/coffeeorder/global/error/GlobalExceptionHandler.java`
+  - `src/test/java/com/usersy628/coffeeorder/global/error/GlobalExceptionHandlerTest.java`
+  - `src/test/java/com/usersy628/coffeeorder/support/testcontainers/DatabaseSmokeTest.java`
+  - `.github/workflows/ci.yml`
+  - `docs/IMPLEMENTATION_PLAN.md`
+  - `docs/PROJECT_STATUS.md`
+- 먼저 수행할 테스트 또는 검증:
+  1. `GlobalExceptionHandlerTest`의 테스트용 endpoint에 `userId` 경로 변수, 필수 `Idempotency-Key`와 JSON 요청을 추가한다.
+  2. 잘못된 `userId` 타입·범위, 필수 헤더 누락과 지원하지 않는 `Content-Type`이 현재 catch-all에 의해 `500 INTERNAL_SERVER_ERROR`로 실패하는 RED를 확인한다.
+  3. 각 4xx 응답의 오류 코드, 빈 또는 제한된 `details`, body `traceId`와 `X-Trace-Id` 일치를 검증한다.
+  4. `DatabaseSmokeTest`에서 이미 적용된 DB에 `flyway.migrate()`를 다시 호출하고 적용 건수가 0이며 이어지는 `validate()`가 성공하는지 검증한다.
+  5. GitHub Actions를 추가한 PR에서 Java 17·Docker 기반 전체 테스트, `bootJar`와 `git diff --check`가 성공하는지 확인한다.
+- 구현 범위:
+  - `MethodArgumentTypeMismatchException`의 `userId` 오류를 `400 INVALID_USER_ID`로 변환
+  - `HandlerMethodValidationException`의 `userId` 제약 위반을 `400 INVALID_USER_ID`로 변환
+  - `MissingRequestHeaderException`의 `Idempotency-Key` 누락을 `400 IDEMPOTENCY_KEY_REQUIRED`로 변환
+  - `HttpMediaTypeNotSupportedException`을 `415 UNSUPPORTED_MEDIA_TYPE`으로 변환
+  - 예상된 4xx의 내부 예외 정보 비노출과 traceId 응답 계약 유지
+  - Flyway 재실행 시 추가 적용 migration 0건과 `validate()` 성공 검증
+  - `dev` 대상 PR에서 Gradle Wrapper, Java 17, Docker, `clean test`, `bootJar`, `git diff --check`를 검증하는 GitHub Actions
+  - workflow 최초 실행 성공 후 `dev` 브랜치에 해당 required check 설정
+  - `S7-01`과 `S8-01`에서 `MethodArgumentNotValidException`을 각각 기능별 오류 코드와 `details.fieldErrors`로 처리하도록 작업 순서 명시
+- 제외 범위:
+  - 메뉴·포인트·주문·인기 메뉴 API 구현
+  - `MethodArgumentNotValidException`을 하나의 공통 오류 코드로 고정
+  - 과거 PR과 당시 `PROJECT_STATUS.md`의 소급 수정
+  - `S12-01`의 전체 API 오류·traceId·로그 최종 회귀 검증 제거
+  - 새 Flyway migration, schema 또는 seed 변경
+- 완료 조건:
+  - 정의된 공통 MVC 4xx가 catch-all `500`으로 오분류되지 않는다.
+  - 각 오류 body의 `traceId`와 `X-Trace-Id`가 일치하고 내부 예외 정보가 노출되지 않는다.
+  - 이미 적용된 MySQL `8.4.10` DB에서 `flyway.migrate()` 재호출의 적용 건수가 0이고 `validate()`가 성공한다.
+  - 로컬 전체 테스트와 `bootJar`, GitHub Actions가 성공한다.
+  - `dev` 브랜치에서 CI check가 필수로 설정된다.
+  - 기능별 DTO 검증 오류의 구현 책임이 `S7-01`과 `S8-01`에 명확히 남는다.
+- 검증 명령:
+
+```powershell
+docker info
+.\gradlew.bat test --tests "com.usersy628.coffeeorder.global.error.GlobalExceptionHandlerTest"
+.\gradlew.bat test --tests "com.usersy628.coffeeorder.support.testcontainers.DatabaseSmokeTest"
+.\gradlew.bat clean test
+.\gradlew.bat bootJar
+git diff --check
+git status --short
+gh pr checks
+```
 
 ## 현재 READY 작업
 
@@ -70,8 +135,8 @@
   - `README.md`의 `API 명세 > 메뉴 목록 조회`
   - `README.md`의 `테이블 설계 > menu`
   - `README.md`의 `테스트 전략`
-- 선행 작업: `S5-02` 완료와 issue #2의 `dev` 병합
-- 작업 브랜치: issue #2 병합 후 최신 `dev`에서 `feature/issue-3-menu-list-api` 생성
+- 선행 작업: `S5-03` 완료와 issue #17의 `dev` 병합
+- 작업 브랜치: issue #17 병합 후 최신 `dev`에서 `feature/issue-3-menu-list-api` 생성
 - 대상 파일:
   - `src/main/java/com/usersy628/coffeeorder/menu/domain/Menu.java`
   - `src/main/java/com/usersy628/coffeeorder/menu/domain/MenuStatus.java`
