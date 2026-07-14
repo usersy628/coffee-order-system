@@ -10,7 +10,8 @@
 - `S5-01` 기술 스택과 프로젝트 구조 승인 및 문서화 완료 (`DONE`, issue #1)
 - `S5-02` Spring Boot 기본 구조와 MySQL 통합 테스트 환경 완료 (`DONE`, issue #2)
 - `S5-03` 리뷰 후속 공통 MVC 오류·Flyway 재실행 검증·PR CI 기반 보완 완료 (`DONE`, issue #17)
-- 다음 작업: `S6-01` 메뉴 목록 조회 API (`READY`, issue #3)
+- `S6-01` 메뉴 목록 조회 API 완료 (`DONE`, issue #3)
+- 다음 준비 작업: `S7-01` 포인트 충전 API 상세 구체화 (`BACKLOG`, issue #4)
 
 ## 문서 기준
 
@@ -37,6 +38,8 @@
 - 공통 MVC 4xx 매핑과 계약 테스트 보강, 전체 16개 테스트 통과 (`45612f5`, issue #17)
 - Flyway migration 재실행 시 추가 적용 0건과 `validate()` 성공 검증 (`0319638`, issue #17)
 - Java 17·Docker·전체 테스트·`bootJar`·diff를 검증하는 PR CI 추가 (`e018bf8`, issue #17)
+- 판매 중지 포함 전체 메뉴의 ID 오름차순 조회 계층 구현 (`eacde62`, issue #3)
+- `GET /api/menus`의 네 필드·빈 배열·traceId 계약과 MySQL 통합 테스트 구현, 전체 20개 테스트 통과 (`c7f599b`, issue #3)
 
 ## 확정된 구현 기준
 
@@ -46,21 +49,22 @@
 - 공통 오류·traceId 최소 기반과 MySQL 테스트 기반은 `S5-02`, 공통 MVC 전송 오류와 Flyway 재실행 검증은 `S5-03`에서 보강함
 - 충전·주문 DTO 검증 오류는 각각 `S7-01`·`S8-01`에서 기능별 코드로 구현하고, 전체 오류 계약의 최종 회귀는 `S12-01`에서 수행함
 - `dev` 대상 PR은 필수 `Build and test` check에서 Java 17·Docker 기반 전체 테스트, `bootJar`와 `git diff --check`를 통과해야 함
+- 메뉴 목록은 MySQL primary에서 판매 상태와 관계없이 전체 메뉴를 ID 오름차순으로 조회하고, `menuId`, `name`, `price`, `status`만 반환함
 - RestClient·Apache HttpClient 5의 숨은 재시도 부재와 5초 전체 call deadline은 `S9-01` WireMock 실제 소켓 테스트의 합격 조건으로 검증함
 
 현재 진행을 막는 외부 차단 사항은 없다. Flyway는 MySQL 8.4가 공식 최신 검증 범위보다 새 버전이라는 경고를 출력하지만, 실제 MySQL 8.4.10 smoke test와 migration 검증을 통과했으며 이 호환성 위험은 계속 통합 테스트로 감시한다.
 
 ## 다음 행동
 
-issue #17이 `dev`에 병합된 상태를 확인한 뒤 issue #3의 `feature/issue-3-menu-list-api` 브랜치를 만든다. 먼저 `GET /api/menus`가 404로 실패하는 MySQL API 통합 테스트를 작성하고, 메뉴 목록 계약을 구현한다. 정확한 대상 파일과 완료 명령은 `docs/IMPLEMENTATION_PLAN.md`의 현재 `READY` 작업을 따른다.
+issue #3이 `dev`에 병합된 상태를 확인한 뒤 issue #4의 요구사항과 README 포인트 충전 계약을 대조한다. `S7-01`의 정확한 대상 파일, 먼저 실패시킬 테스트와 검증 명령을 `docs/IMPLEMENTATION_PLAN.md`에 기록하고 사용자 승인을 받아 `READY`로 전환한다. 승인 전에는 구현 브랜치를 만들지 않는다.
 
 ## 작업 재개 기준
 
-- 기준 브랜치: issue #17 병합 후 최신 `dev`
+- 기준 브랜치: issue #3 병합 후 최신 `dev`
 - 원격 저장소: `https://github.com/usersy628/coffee-order-system.git`
-- GitHub 작업 이슈: #1~#12, #15, #17, 다음 issue #3
+- GitHub 작업 이슈: #1~#12, #15, #17, 다음 준비 issue #4
 - 경량 구현 계획 기준 커밋: `999f04e docs: add lightweight implementation workflow`
 - 최신 설계 기준 커밋: `dd2a27c docs: simplify design after tutor feedback`
 - 승인된 기술 스택과 S5-02 준비 기준 커밋: `fe6d65b docs: approve technology stack and project structure (#1)`
-- 예상 작업 트리: issue #17 병합 직후에는 clean, 다음 작업 브랜치는 `feature/issue-3-menu-list-api`
+- 예상 작업 트리: issue #3 병합 직후에는 clean, `S7-01` 승인 전에는 issue #4 브랜치를 만들지 않음
 - 재개 시 `AGENTS.md`의 저장소 확인 명령으로 실제 상태를 다시 검증
