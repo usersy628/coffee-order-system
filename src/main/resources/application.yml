@@ -44,3 +44,15 @@ coffee-order:
         max-attempts: 3
         initial-backoff: 50ms
         jitter-factor: 0.2
+  outbox:
+    publisher:
+      enabled: false
+      poll-interval: 1s
+      batch-size: 10
+      max-concurrency: 10
+      http-call-timeout: 5s
+      lease-timeout: 30s
+      max-attempts: 6
+      initial-backoff: 1s
+      jitter-factor: 0.2
+      data-platform-base-url: ""

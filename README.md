@@ -51,7 +51,7 @@ Spring Boot가 BOM으로 관리하는 Spring Framework, Hibernate, MySQL Connect
 | MVC API와 입력 검증 | `spring-boot-starter-web`, `spring-boot-starter-validation` | 기본 구조 |
 | 영속성과 운영 확인 | `spring-boot-starter-data-jpa`, `spring-boot-starter-actuator` | 기본 구조 |
 | DB와 migration | `mysql-connector-j`, `flyway-core`, `flyway-mysql` | 기본 구조 |
-| 외부 데이터 플랫폼 HTTP | Spring Web의 `RestClient`, Apache HttpClient 5 | Outbox 게시자 |
+| 외부 데이터 플랫폼 HTTP | Apache HttpClient 5 classic | Outbox 게시자 |
 | 단위·API 테스트 | `spring-boot-starter-test`, Spring Test의 `MockRestServiceServer` | 기본 구조와 기능별 테스트 |
 | 실제 MySQL 통합 테스트 | `spring-boot-testcontainers`, Testcontainers JUnit·MySQL | 기본 구조 |
 | 실제 소켓 장애 테스트 | WireMock | Outbox 게시자 |
@@ -129,7 +129,7 @@ Spring proxy를 우회하는 self-invocation을 막기 위해 충전과 주문�
 - Flyway `V1`은 ERD의 schema를 만들고 `V2`는 과제 실행에 필요한 사용자·메뉴와 각 사용자의 0P 지갑을 함께 삽입합니다. `V2`는 과제용 고정 초기 데이터이며 실제 서비스에서는 환경별 기준 데이터를 schema migration과 분리합니다. 테스트별 가변 데이터는 migration에 넣지 않고 test fixture에서 생성합니다.
 - 단위 테스트는 시간·해시·금액 같은 순수 규칙, MVC slice는 API 계약, MySQL Testcontainers 통합 테스트는 FK·CHECK·락·트랜잭션과 native query에 집중합니다. 핵심 통합 테스트는 Docker가 없다고 건너뛰지 않고 실행 환경 문제를 드러냅니다.
 
-외부 데이터 플랫폼 adapter는 `RestClient`와 Apache HttpClient 5를 사용하고 HTTP client 내부 자동 재시도를 끕니다. connection pool 대기, DNS·TLS·connect와 read를 포함한 시도당 5초 전체 예산은 구성값과 외부 watchdog으로 제한하고 WireMock 실제 소켓 테스트에서 경과 시간과 호출 횟수를 검증합니다. 이 합격 조건을 만족하지 못하면 `DataPlatformClient` port는 유지한 채 `S9-01`에서 adapter 선택을 다시 검토합니다. 재시도 횟수와 백오프의 유일한 소유자는 계속 Outbox입니다.
+외부 데이터 플랫폼 adapter는 Apache HttpClient 5 classic을 사용하고 HTTP client 내부 자동 재시도를 끕니다. connection pool 대기, DNS·TLS·connect와 read를 포함한 시도당 5초 전체 예산은 구성값과 외부 watchdog으로 제한합니다. deadline이 지나면 `HttpPost.cancel()`로 실제 요청 취소를 시도하고, deadline worker는 대기열 없는 최대 동시성 수만큼만 두어 멈추지 않는 I/O가 새 이벤트를 무한히 쌓지 못하게 합니다. WireMock 실제 소켓 테스트에서 경과 시간과 호출 횟수를 검증합니다. 재시도 횟수와 백오프의 유일한 소유자는 계속 Outbox입니다.
 
 ## 핵심 정책
 

@@ -3,3 +3,8 @@ spring:
     banner-mode: off
   jpa:
     show-sql: false
+
+coffee-order:
+  outbox:
+    publisher:
+      enabled: false

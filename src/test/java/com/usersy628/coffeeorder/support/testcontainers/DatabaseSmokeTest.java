@@ -36,12 +36,12 @@ class DatabaseSmokeTest {
     private MockMvc mockMvc;
 
     @Test
-    void appliesBothMigrationsAndCreatesTheSevenDesignedTables() throws SQLException {
+    void appliesAllThreeMigrationsAndCreatesTheEightDesignedTables() throws SQLException {
         Integer migrationCount = jdbcTemplate.queryForObject("""
                 SELECT COUNT(*)
                 FROM flyway_schema_history
                 WHERE success = 1
-                  AND version IN ('1', '2')
+                  AND version IN ('1', '2', '3')
                 """, Integer.class);
 
         Integer tableCount = jdbcTemplate.queryForObject("""
@@ -55,12 +55,13 @@ class DatabaseSmokeTest {
                       'menu',
                       'orders',
                       'order_item',
-                      'order_event_outbox'
+                      'order_event_outbox',
+                      'mock_data_platform_received_event'
                   )
                 """, Integer.class);
 
-        assertThat(migrationCount).isEqualTo(2);
-        assertThat(tableCount).isEqualTo(7);
+        assertThat(migrationCount).isEqualTo(3);
+        assertThat(tableCount).isEqualTo(8);
 
         MigrateResult repeatedMigration = flyway.migrate();
         assertThat(repeatedMigration.migrationsExecuted).isZero();
@@ -132,6 +133,19 @@ class DatabaseSmokeTest {
                 """, orderId))
                 .isInstanceOf(DataAccessException.class)
                 .hasMessageContaining("ck_order_event_outbox_state_fields");
+
+        String eventId = "c88501f7-5e08-43d8-bbb1-1fd02a22ce7b";
+        jdbcTemplate.update("""
+                INSERT INTO mock_data_platform_received_event (event_id, payload, received_at)
+                VALUES (?, JSON_OBJECT('eventId', ?), UTC_TIMESTAMP(6))
+                """, eventId, eventId);
+
+        assertThatThrownBy(() -> jdbcTemplate.update("""
+                INSERT INTO mock_data_platform_received_event (event_id, payload, received_at)
+                VALUES (?, JSON_OBJECT('eventId', ?), UTC_TIMESTAMP(6))
+                """, eventId, eventId))
+                .isInstanceOf(DataAccessException.class)
+                .hasMessageContaining("uk_mock_data_platform_received_event_event_id");
     }
 
     @Test
