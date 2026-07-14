@@ -6,6 +6,62 @@
 
 ## 완료 작업 상세
 
+### [`S10-01`](https://github.com/usersy628/coffee-order-system/issues/7) 최근 168시간 인기 메뉴 TOP 3 조회
+
+- 상태: `DONE`
+- issue: [#7](https://github.com/usersy628/coffee-order-system/issues/7) `OPEN`
+- PR: 생성 후 기록
+- merge commit: 병합 후 기록
+- 완료일: 2026-07-15
+- 구현 커밋: `5724012` (`feat: add popular menu top three query (#7)`)
+- 목적: 조회 시각부터 정확히 168시간의 완료 주문을 MySQL 원본 데이터로 직접 집계하여 `GET /api/menus/popular`에서 최대 3개 인기 메뉴와 같은 조회 경계를 반환한다.
+- 요구사항 근거:
+  - [`README.md` 인기 메뉴 정책](../README.md#인기-메뉴)
+  - [`README.md` 최근 168시간 인기 메뉴 TOP 3 조회 API](../README.md#최근-168시간-인기-메뉴-top-3-조회)
+  - [`README.md` 시간 저장 기준](../README.md#시간-저장-기준)
+  - [`README.md` 인덱스](../README.md#인덱스)
+  - [`README.md` 테스트 전략](../README.md#테스트-전략)
+- 선행 작업: `S8-01`이 PR #27로 `dev`에 병합되어 `orders`, `order_item`, UTC `paid_at`과 `quantity`가 준비됨. S9-01은 별도 선행 조건이 아니며 PR #28도 병합됨.
+- 사용자 진행 승인: 2026-07-15. README에 확정된 168시간 rolling window·수량 집계·정렬·시간 정책을 변경하지 않고 구현한다.
+- 작업 브랜치: `feature/issue-7-popular-menu-top3`
+- 대상 파일:
+  - `src/main/java/com/usersy628/coffeeorder/popularity/api/{PopularMenuController,PopularMenuResponse}.java`
+  - `src/main/java/com/usersy628/coffeeorder/popularity/application/{PopularMenuQueryService,PopularMenuQueryRepository,PopularMenu}.java`
+  - `src/main/java/com/usersy628/coffeeorder/popularity/infrastructure/JdbcPopularMenuQueryRepository.java`
+  - `src/test/java/com/usersy628/coffeeorder/popularity/api/PopularMenuApiIntegrationTest.java`
+  - `README.md`, `docs/IMPLEMENTATION_PLAN.md`, `docs/IMPLEMENTATION_HISTORY.md`, `docs/PROJECT_STATUS.md`
+- 먼저 수행한 테스트 또는 검증:
+  1. 고정 `Clock`을 주입한 `PopularMenuApiIntegrationTest`에서 아직 없는 `GET /api/menus/popular`에 `200 OK`와 계약 body를 기대한다.
+  2. 실제 MySQL fixture로 시작 포함·종료 제외·정확히 168시간·수량 합계·동률 `menuId` 오름차순·상위 3개·빈 결과와 현재 메뉴명, `DECIMAL` 합계의 `long` 변환을 검증한다.
+  3. 응답 `from`·`to`가 한 번 얻은 나노초 포함 `Clock` 값을 마이크로초로 절삭한 같은 `[T - 168시간, T)` 경계를 `Asia/Seoul` `+09:00`으로 표현하는지 검증한다.
+- RED 확인:
+  - 2026-07-15 `PopularMenuApiIntegrationTest`의 두 시나리오가 endpoint 부재로 `200` 기대값에 `404`를 반환해 실패했다.
+- 구현 결과:
+  - `popularity` 패키지에 controller·application port/service·`JdbcTemplate` repository를 추가해 메뉴 목록 조회와 주문 이력 집계를 분리했다.
+  - service는 `Clock`에서 `T`를 한 번 얻어 마이크로초로 절삭하고 `from = T - 168시간`, `to = T`를 계산한다. query와 response는 같은 두 `Instant`를 재사용한다.
+  - repository는 `orders.paid_at`의 UTC 반열린 범위와 `order_item.quantity`를 직접 SQL로 집계하고, 수량 내림차순·`menu_id` 오름차순·최대 3개를 적용했다. 현재 스키마의 모든 주문이 `PAID`이므로 중복 상태 조건은 추가하지 않았다.
+  - 현재 `menu.name`을 반환해 판매 중지 메뉴도 과거 판매량이 있으면 포함하며, MySQL `SUM(INT)` 값은 `BigDecimal.longValueExact()`로 변환한다.
+  - API response는 최종 정렬 순서대로 `rank`를 1부터 부여하고, `from`·`to`만 `Asia/Seoul` `OffsetDateTime`으로 변환한다.
+- 제외 범위:
+  - 새 migration·인덱스, 캐시·Redis·집계 테이블·스트리밍 집계, read replica
+  - 일 단위 또는 한국 날짜 단위 집계, 주문·Outbox·메뉴 목록 정책 변경, `EXPLAIN ANALYZE` 성능 프로필과 k6 부하 테스트
+- 완료 조건 및 실제 결과:
+  - `GET /api/menus/popular`가 `200 OK`로 `from`, `to`, 최대 3개 `items[{rank, menuId, menuName, totalQuantity}]`를 반환하고 빈 결과는 빈 배열이다.
+  - 실제 MySQL에서 `[T - 168시간, T)` 시작 포함·종료 제외, 수량 합계, 동률 `menuId` 정렬, 상위 3개 제한, 현재 메뉴명과 `DECIMAL` 변환을 통과했다.
+  - 고정 `Clock`의 나노초가 마이크로초로 절삭되고, UTC 조회 경계와 `Asia/Seoul` API 경계가 같으며 `Clock.instant()`를 한 번만 호출함을 통과했다.
+  - 대상 통합 테스트, daemon 없이 강제 재실행한 전체 테스트 96개(실패·오류·skip 0), `bootJar`, `git diff --check`를 통과했다.
+- 계획 대비 변경 사항:
+  - 요구사항·API 계약·스키마·인덱스와 캐시 정책의 변경은 없다.
+  - 전체 테스트 증거가 선택 실행 결과를 재사용하지 않도록 `--no-daemon --rerun-tasks`로 96개 전체 테스트를 다시 실행해 확인했다.
+- 검증 명령:
+
+```powershell
+.\gradlew.bat test --tests "com.usersy628.coffeeorder.popularity.api.PopularMenuApiIntegrationTest"
+.\gradlew.bat test --no-daemon --rerun-tasks
+.\gradlew.bat bootJar --no-daemon
+git diff --check
+```
+
 ### [`S9-01`](https://github.com/usersy628/coffee-order-system/issues/6) Outbox 게시자와 Mock 데이터 수집 플랫폼 구현
 
 - 상태: `DONE`
