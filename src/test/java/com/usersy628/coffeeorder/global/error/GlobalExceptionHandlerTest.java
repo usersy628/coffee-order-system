@@ -11,6 +11,8 @@ import java.util.Map;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.usersy628.coffeeorder.global.trace.TraceIdFilter;
+import com.usersy628.coffeeorder.point.api.PointChargeRequest;
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.Min;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -147,6 +149,20 @@ class GlobalExceptionHandlerTest {
 		assertThat(result.getResponse().getContentAsString()).doesNotContain("text/plain");
 	}
 
+	@Test
+	void mapsPointChargeBodyValidationToItsFeatureErrorCode() throws Exception {
+		MvcResult result = mockMvc.perform(post("/test/charge-validation")
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("{\"amount\":0}"))
+			.andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.code").value("INVALID_CHARGE_AMOUNT"))
+			.andExpect(jsonPath("$.details.fieldErrors[0].field").value("amount"))
+			.andExpect(jsonPath("$.details.fieldErrors[0].rejectedValue").value(0))
+			.andReturn();
+
+		assertTraceIdMatchesHeader(result);
+	}
+
 	private void assertTraceIdMatchesHeader(MvcResult result) throws Exception {
 		String headerTraceId = result.getResponse().getHeader(TraceIdFilter.TRACE_ID_HEADER);
 		JsonNode responseBody = objectMapper.readTree(result.getResponse().getContentAsByteArray());
@@ -185,6 +201,11 @@ class GlobalExceptionHandlerTest {
 			@RequestBody TestRequest request
 		) {
 			return Map.of("amount", request.amount());
+		}
+
+		@PostMapping(value = "/charge-validation", consumes = MediaType.APPLICATION_JSON_VALUE)
+		PointChargeRequest chargeValidation(@Valid @RequestBody PointChargeRequest request) {
+			return request;
 		}
 	}
 

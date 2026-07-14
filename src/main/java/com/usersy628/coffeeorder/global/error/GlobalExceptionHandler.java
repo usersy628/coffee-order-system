@@ -1,8 +1,11 @@
 package com.usersy628.coffeeorder.global.error;
 
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 import com.usersy628.coffeeorder.global.trace.TraceIdFilter;
+import com.usersy628.coffeeorder.point.api.PointChargeRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
@@ -10,6 +13,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.HttpMediaTypeNotSupportedException;
 import org.springframework.web.bind.MissingRequestHeaderException;
+import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.HandlerMethodValidationException;
@@ -60,11 +64,59 @@ public class GlobalExceptionHandler {
 	) {
 		boolean invalidUserId = exception.getParameterValidationResults().stream()
 			.anyMatch(result -> "userId".equals(result.getMethodParameter().getParameterName()));
-		if (!invalidUserId) {
-			return handleUnexpectedException(exception);
+		if (invalidUserId) {
+			return handleExpectedClientError(ErrorCode.INVALID_USER_ID);
 		}
 
-		return handleExpectedClientError(ErrorCode.INVALID_USER_ID);
+		boolean invalidIdempotencyKey = exception.getParameterValidationResults().stream()
+			.anyMatch(result -> "idempotencyKey".equals(result.getMethodParameter().getParameterName()));
+		if (invalidIdempotencyKey) {
+			return handleExpectedClientError(ErrorCode.INVALID_IDEMPOTENCY_KEY);
+		}
+
+		PointChargeRequest invalidChargeRequest = exception.getParameterValidationResults().stream()
+			.filter(result -> PointChargeRequest.class.equals(result.getMethodParameter().getParameterType()))
+			.map(result -> (PointChargeRequest) result.getArgument())
+			.findFirst()
+			.orElse(null);
+		if (invalidChargeRequest != null) {
+			Map<String, Object> fieldError = new LinkedHashMap<>();
+			fieldError.put("field", "amount");
+			fieldError.put("reason", ErrorCode.INVALID_CHARGE_AMOUNT.getMessage());
+			if (invalidChargeRequest.amount() != null) {
+				fieldError.put("rejectedValue", invalidChargeRequest.amount());
+			}
+			return handleExpectedClientError(
+				ErrorCode.INVALID_CHARGE_AMOUNT,
+				Map.of("fieldErrors", List.of(Map.copyOf(fieldError)))
+			);
+		}
+
+		return handleUnexpectedException(exception);
+	}
+
+	@ExceptionHandler(MethodArgumentNotValidException.class)
+	public ResponseEntity<ApiErrorResponse> handleRequestValidation(MethodArgumentNotValidException exception) {
+		if (!(exception.getBindingResult().getTarget() instanceof PointChargeRequest)) {
+			return handleUnexpectedException(exception);
+		}
+		List<Map<String, Object>> fieldErrors = exception.getBindingResult().getFieldErrors().stream()
+			.map(fieldError -> {
+				Map<String, Object> detail = new LinkedHashMap<>();
+				detail.put("field", fieldError.getField());
+				detail.put("reason", fieldError.getDefaultMessage());
+				if (fieldError.getRejectedValue() != null) {
+					detail.put("rejectedValue", fieldError.getRejectedValue());
+				}
+				return Map.copyOf(detail);
+			})
+			.toList();
+		String traceId = currentTraceId();
+		ErrorCode errorCode = ErrorCode.INVALID_CHARGE_AMOUNT;
+		log.info("Handled request validation error code={} traceId={}", errorCode.name(), traceId);
+
+		return ResponseEntity.status(errorCode.getHttpStatus())
+			.body(ApiErrorResponse.from(errorCode, Map.of("fieldErrors", fieldErrors), traceId));
 	}
 
 	@ExceptionHandler(MissingRequestHeaderException.class)
@@ -106,11 +158,18 @@ public class GlobalExceptionHandler {
 	}
 
 	private ResponseEntity<ApiErrorResponse> handleExpectedClientError(ErrorCode errorCode) {
+		return handleExpectedClientError(errorCode, Map.of());
+	}
+
+	private ResponseEntity<ApiErrorResponse> handleExpectedClientError(
+		ErrorCode errorCode,
+		Map<String, Object> details
+	) {
 		String traceId = currentTraceId();
 		log.info("Handled client error code={} traceId={}", errorCode.name(), traceId);
 
 		return ResponseEntity.status(errorCode.getHttpStatus())
-			.body(ApiErrorResponse.from(errorCode, Map.of(), traceId));
+			.body(ApiErrorResponse.from(errorCode, details, traceId));
 	}
 
 	private String currentTraceId() {
