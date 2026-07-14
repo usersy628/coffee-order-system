@@ -7,7 +7,8 @@
 - 2단계 도메인 및 ERD 설계 완료
 - 3단계 API 명세 작성 완료
 - 4단계 동시성·트랜잭션·Outbox 전략 상세 검토 완료
-- 현재 작업: `S5-01` 기술 스택과 프로젝트 구조 승인 (`READY`)
+- `S5-01` 기술 스택과 프로젝트 구조 승인 및 문서화 완료 (`DONE`, issue #1)
+- 다음 작업: `S5-02` Spring Boot 기본 구조와 MySQL 통합 테스트 환경 (`READY`, issue #2)
 - Spring Boot 프로젝트와 애플리케이션 코드는 아직 생성하지 않음
 
 ## 문서 기준
@@ -15,7 +16,7 @@
 - 제품 요구사항, ERD, API 계약과 기술적 결정: `README.md`
 - 구현 작업 ID, 선행 관계, 대상 파일과 검증 기준: `docs/IMPLEMENTATION_PLAN.md`
 - 작업·Git·보안·인수인계 규칙: `AGENTS.md`
-- 이 문서에는 현재 단계, 미결 사항과 다음 행동만 기록하며 위 문서의 내용을 복제하지 않음
+- 이 문서에는 현재 단계, 확정된 구현 기준과 다음 행동만 기록하며 위 문서의 상세 내용을 복제하지 않음
 
 ## 완료된 주요 이정표
 
@@ -29,28 +30,30 @@
 - 전체 설계 신뢰성 검토 완료 (`051854b`)
 - 경량 구현 작업 관리 흐름 추가 (`999f04e`)
 - 튜터 피드백 기반 인덱스·Outbox 간소화, 예외 처리와 부하 확장 기준 보강 (`dd2a27c`)
+- 구현 계획의 `S5-01`~`S15-01`을 GitHub issue #1~#12로 등록
+- Java 17·Spring Boot 3.5.16·Gradle 8.14.3·MySQL 8.4.10과 기능 중심 계층 구조 승인 (`fe6d65b`, issue #1)
 
-## 미결 사항
+## 확정된 구현 기준
 
-- Java와 Spring Boot 세부 버전
-- Gradle과 Maven 비교를 포함한 빌드 도구 선택 및 버전
-- 기본 의존성, 패키지 구조와 도메인·애플리케이션·인프라 계층 경계
-- Flyway 적용 여부와 초기 사용자·메뉴 데이터 구성 방식
-- 트랜잭션 재시도와 새 트랜잭션 조회를 Spring proxy 경계에서 분리하는 클래스 구조
-- 외부 결제 API 없이 Mock 데이터 수집 플랫폼에만 사용할 HTTP 클라이언트와 테스트 대역 방식
-- 로컬·테스트 설정 파일과 MySQL Testcontainers 기반 구성
+- 기술 스택, 패키지 경계, 설정과 테스트 도구의 단일 기준은 `README.md`의 `기술 스택과 프로젝트 구조`에 기록함
+- 기능별 작업은 GitHub issue를 먼저 만들고 `feature/issue-<번호>-<slug>` 브랜치와 `dev` 대상 PR로 수행함
+- Flyway `V1` schema와 과제용 `V2` 초기 사용자·메뉴·0P 지갑을 실제 MySQL 8.4.10 Testcontainers에서 검증함
+- 공통 오류·traceId 최소 기반과 MySQL 테스트 기반은 `S5-02`, 기능 전체 오류 계약의 최종 보강은 `S12-01`에서 수행함
+- RestClient·Apache HttpClient 5의 숨은 재시도 부재와 5초 전체 call deadline은 `S9-01` WireMock 실제 소켓 테스트의 합격 조건으로 검증함
 
-현재 진행을 막는 외부 차단 사항은 없다. 위 선택은 `S5-01` 추천안을 검토한 뒤 사용자 승인으로 확정한다.
+현재 진행을 막는 외부 차단 사항은 없다.
 
 ## 다음 행동
 
-`S5-01`을 수행한다. Java·Spring Boot·빌드 도구·MySQL·Flyway·Testcontainers와 Mock 데이터 수집용 HTTP 클라이언트의 추천 버전과 선택 이유, 패키지 구조, 설정 및 테스트 소스 구성을 먼저 제시한다. 사용자가 승인하면 결정 내용을 문서화하고 `S5-02`의 정확한 대상 파일과 검증 명령을 채운 뒤에만 프로젝트 파일을 생성한다.
+issue #1의 문서 PR을 `dev`에 병합한 뒤 최신 `dev`에서 `feature/issue-2-project-bootstrap` 브랜치를 만든다. `S5-02`의 첫 행동은 Java·Docker 상태를 확인하고 Gradle Wrapper와 context load 테스트를 준비하는 것이다. 정확한 대상 파일, 먼저 수행할 테스트와 완료 명령은 `docs/IMPLEMENTATION_PLAN.md`의 현재 `READY` 작업을 따른다.
 
 ## 작업 재개 기준
 
-- 현재 브랜치: `dev`
+- 현재 브랜치: `feature/issue-1-tech-stack-structure`
 - 원격 저장소: `https://github.com/usersy628/coffee-order-system.git`
+- GitHub 작업 이슈: #1~#12, 현재 issue #1
 - 경량 구현 계획 기준 커밋: `999f04e docs: add lightweight implementation workflow`
 - 최신 설계 기준 커밋: `dd2a27c docs: simplify design after tutor feedback`
-- 예상 작업 트리: clean, `dev`와 `origin/dev` 동기화
+- 승인된 기술 스택과 S5-02 준비 기준 커밋: `fe6d65b docs: approve technology stack and project structure (#1)`
+- 예상 작업 트리: issue #1 변경 커밋 후 clean, `dev`에서 분기
 - 재개 시 `AGENTS.md`의 저장소 확인 명령으로 실제 상태를 다시 검증
