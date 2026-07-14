@@ -4,11 +4,12 @@
 
 ## 현재 상태
 
-- 기준 브랜치 `dev`의 확인 HEAD: `14d8637` (PR #26 merge commit)
+- 기준 브랜치 `dev`의 확인 HEAD: `d799341` (PR #27 merge commit)
 - `S7-01` 포인트 충전 API: `DONE`, issue #4 `CLOSED`, PR #24 `MERGED`
 - PR #24의 손상된 한글 본문을 UTF-8 `--body-file`로 복구했고 GitHub 원본에서 한글 제목과 예상하지 않은 리터럴 `?`가 없음을 확인함
 - `DOC-01` 구현 계획과 완료 이력 분리: `DONE`, issue #25 `CLOSED`, PR #26 `MERGED`, merge commit `14d8637`
-- `S8-01` 주문·포인트 결제·멱등성: 구현·로컬 검증 `DONE`, issue #5 `OPEN`, PR #27 `OPEN`, 필수 `Build and test` 성공
+- `S8-01` 주문·포인트 결제·멱등성: `DONE`, issue #5 `CLOSED`, PR #27 `MERGED`, merge commit `d799341`, 필수 `Build and test` 성공
+- `S9-01` Outbox 게시자와 Mock 데이터 수집 플랫폼: issue #6 `OPEN`, Mock 수신 HTTP 경계 승인 대기
 
 ## 문서 기준
 
@@ -24,7 +25,8 @@
 - PR #27 리뷰의 주문 흐름 문서 불일치와 금액 오버플로 500 응답을 수정했다.
 - 리뷰 반영 후 전체 테스트 66개와 `bootJar`가 성공했으며 주문 동시성은 동일 키 100개와 서로 다른 주문 100개로 검증했다.
 - PR 생성과 필수 CI 성공 후에도 자동 병합하지 않고 별도 검토와 사용자의 명시적 승인을 기다린다.
+- S9의 선점·lease·fencing·재시도·중복 소비 정책은 README에 확정돼 있다. Mock을 같은 앱의 내부 HTTP 수신기로 둘지와 수신 URI·저장 경계는 아직 확정하지 않았다.
 
 ## 다음 행동
 
-PR #27을 별도 검토자가 검토하고 지적 사항이 있으면 같은 브랜치에 반영한다.
+S9 Mock 수신 계약을 승인받아 `READY` 상세를 확정한다.

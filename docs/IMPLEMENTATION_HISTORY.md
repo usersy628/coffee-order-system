@@ -11,9 +11,9 @@
 - 상태: `DONE`
 - issue: [#5](https://github.com/usersy628/coffee-order-system/issues/5)
 - PR: [#27](https://github.com/usersy628/coffee-order-system/pull/27)
-- merge commit: `병합 후 기록`
+- merge commit: `d799341`
 - 완료일: 2026-07-15
-- 완료 커밋: `8fb88ff`, `40339ab`, `fad8563`
+- 완료 커밋: `8fb88ff`, `40339ab`, `fad8563`, `063a7d9`, `5f165d1`, `6da0365`, `40143ce`
 - 사용자 승인: 2026-07-15
 - 목적: `POST /api/users/{userId}/orders`에서 여러 메뉴 주문, 서버 가격 계산, 포인트 차감, 멱등 결과 재현과 `PENDING` Outbox 저장을 하나의 MySQL 트랜잭션으로 구현한다.
 - 요구사항 근거:
