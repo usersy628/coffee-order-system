@@ -37,5 +37,21 @@ dependencies {
 }
 
 tasks.named('test') {
-	useJUnitPlatform()
+	useJUnitPlatform {
+		excludeTags 'performance'
+	}
+}
+
+tasks.register('performanceTest', Test) {
+	group = 'verification'
+	description = 'Runs opt-in MySQL performance profile tests.'
+	dependsOn tasks.named('testClasses')
+	testClassesDirs = sourceSets.test.output.classesDirs
+	classpath = sourceSets.test.runtimeClasspath
+	useJUnitPlatform {
+		includeTags 'performance'
+	}
+	maxParallelForks = 1
+	shouldRunAfter tasks.named('test')
+	outputs.upToDateWhen { false }
 }

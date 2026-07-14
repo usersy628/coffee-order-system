@@ -1,0 +1,19 @@
+spring:
+  datasource:
+    url: jdbc:mysql://127.0.0.1:${PERF_MYSQL_PORT:3308}/coffee_order_perf?useUnicode=true&characterEncoding=UTF-8&connectionTimeZone=UTC&forceConnectionTimeZoneToSession=true
+    username: ${PERF_MYSQL_USER}
+    password: ${PERF_MYSQL_PASSWORD}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+
+server:
+  port: ${PERF_SERVER_PORT:18081}
+
+coffee-order:
+  outbox:
+    publisher:
+      enabled: false
