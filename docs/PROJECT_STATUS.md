@@ -12,6 +12,7 @@
 - `S5-03` 리뷰 후속 공통 MVC 오류·Flyway 재실행 검증·PR CI 기반 보완 완료 (`DONE`, issue #17)
 - `S6-01` 메뉴 목록 조회 API 완료 (`DONE`, issue #3)
 - `S5-04` PR 검토와 명시적 병합 승인 규칙 문서화 완료 (`DONE`, issue #20)
+- `S6-02` 메뉴 UTC 시간 매핑과 README 구현 상태 정합성 보완 완료 (`DONE`, issue #22)
 - 후속 준비 작업: `S7-01` 포인트 충전 API 상세 구체화 (`BACKLOG`, issue #4)
 
 ## 문서 기준
@@ -42,6 +43,8 @@
 - 판매 중지 포함 전체 메뉴의 ID 오름차순 조회 계층 구현 (`eacde62`, issue #3)
 - `GET /api/menus`의 네 필드·빈 배열·traceId 계약과 MySQL 통합 테스트 구현, 전체 20개 테스트 통과 (`c7f599b`, issue #3)
 - PR 생성·CI 성공 후 별도 검토와 사용자 명시적 승인 전 자동 병합을 금지하는 workflow 확정 (`24fb9ef`, issue #20)
+- 메뉴 생성·수정 시각을 UTC `Instant`로 통일하고 MySQL `DATETIME(6)` 마이크로초 조회 검증 추가 (`525d985`, issue #22)
+- README의 완료된 메뉴 목록과 다음 포인트 충전 준비 상태 정합성 갱신 (`fd26552`, issue #22)
 
 ## 확정된 구현 기준
 
@@ -53,21 +56,22 @@
 - `dev` 대상 PR은 필수 `Build and test` check에서 Java 17·Docker 기반 전체 테스트, `bootJar`와 `git diff --check`를 통과해야 함
 - PR 생성과 필수 CI 성공 후에도 자동 병합하지 않으며, 별도 검토 결과를 반영하고 사용자가 해당 PR의 병합을 명시적으로 승인한 경우에만 `dev`에 병합함
 - 메뉴 목록은 MySQL primary에서 판매 상태와 관계없이 전체 메뉴를 ID 오름차순으로 조회하고, `menuId`, `name`, `price`, `status`만 반환함
+- 메뉴의 `createdAt`, `updatedAt`은 UTC `Instant`로 매핑하고 MySQL `DATETIME(6)`의 마이크로초 정밀도로 조회함
 - RestClient·Apache HttpClient 5의 숨은 재시도 부재와 5초 전체 call deadline은 `S9-01` WireMock 실제 소켓 테스트의 합격 조건으로 검증함
 
 현재 진행을 막는 외부 차단 사항은 없다. Flyway는 MySQL 8.4가 공식 최신 검증 범위보다 새 버전이라는 경고를 출력하지만, 실제 MySQL 8.4.10 smoke test와 migration 검증을 통과했으며 이 호환성 위험은 계속 통합 테스트로 감시한다.
 
 ## 다음 행동
 
-issue #20이 `dev`에 병합된 상태를 확인한 뒤 issue #4의 요구사항과 README 포인트 충전 계약을 대조한다. `S7-01`의 정확한 대상 파일, 먼저 실패시킬 테스트와 검증 명령을 `docs/IMPLEMENTATION_PLAN.md`에 기록하고 사용자 승인을 받아 `READY`로 전환한다. 승인 전에는 구현 브랜치를 만들지 않는다.
+issue #22가 `dev`에 병합된 상태를 확인한 뒤 issue #4의 요구사항과 README 포인트 충전 계약을 대조한다. `S7-01`의 정확한 대상 파일, 먼저 실패시킬 테스트와 검증 명령을 `docs/IMPLEMENTATION_PLAN.md`에 기록하고 사용자 승인을 받아 `READY`로 전환한다. 승인 전에는 구현 브랜치를 만들지 않는다.
 
 ## 작업 재개 기준
 
-- 기준 브랜치: issue #20 병합 후 최신 `dev`
+- 기준 브랜치: issue #22 병합 후 최신 `dev`
 - 원격 저장소: `https://github.com/usersy628/coffee-order-system.git`
-- GitHub 작업 이슈: #1~#12, #15, #17, #20, 다음 준비 issue #4
+- GitHub 작업 이슈: #1~#12, #15, #17, #20, #22, 다음 준비 issue #4
 - 경량 구현 계획 기준 커밋: `999f04e docs: add lightweight implementation workflow`
 - 최신 설계 기준 커밋: `dd2a27c docs: simplify design after tutor feedback`
 - 승인된 기술 스택과 S5-02 준비 기준 커밋: `fe6d65b docs: approve technology stack and project structure (#1)`
-- 예상 작업 트리: issue #20 병합 직후에는 clean, `S7-01` 승인 전에는 issue #4 브랜치를 만들지 않음
+- 예상 작업 트리: issue #22 병합 직후에는 clean, `S7-01` 승인 전에는 issue #4 브랜치를 만들지 않음
 - 재개 시 `AGENTS.md`의 저장소 확인 명령으로 실제 상태를 다시 검증
