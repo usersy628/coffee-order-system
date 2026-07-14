@@ -163,6 +163,26 @@ class OrderApiIntegrationTest {
 		Assertions.assertThat(count("order_event_outbox")).isZero();
 	}
 
+	@Test
+	void rejectsAnUnaffordableOrderWithoutOverflowingTheAmountCalculation() throws Exception {
+		jdbcTemplate.update("UPDATE menu SET price = ? WHERE id = 1", Long.MAX_VALUE);
+		try {
+			performOrder(
+				"overflowing-order-amount",
+				"{\"items\":[{\"menuId\":1,\"quantity\":2}]}"
+			)
+				.andExpect(status().isConflict())
+				.andExpect(jsonPath("$.code").value("INSUFFICIENT_POINTS"));
+		} finally {
+			jdbcTemplate.update("UPDATE menu SET price = 4500 WHERE id = 1");
+		}
+
+		Assertions.assertThat(count("orders")).isZero();
+		Assertions.assertThat(count("point_history")).isZero();
+		Assertions.assertThat(count("order_event_outbox")).isZero();
+		Assertions.assertThat(walletBalance()).isEqualTo(30_000L);
+	}
+
 	@ParameterizedTest
 	@ValueSource(strings = {
 		"{\"items\":[]}",

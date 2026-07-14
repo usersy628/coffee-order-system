@@ -77,13 +77,16 @@
   - 주문·항목·`USE` 이력·Outbox와 지갑 시각, Outbox `occurredAt` 및 API `paidAt`이 같은 마이크로초 순간인지 검증했다.
   - 동일 멱등 키 100개 동시 요청은 주문·차감·Outbox가 한 건만 생성되고, 서로 다른 주문 100개는 잔액 유실 없이 모두 직렬화됨을 실제 MySQL에서 검증했다.
   - 실제 MySQL 락 timeout의 전체 명령 3회 재시도와 소진 시 `503 CONCURRENT_REQUEST_TIMEOUT`, Outbox 저장 실패 시 주문·항목·차감·이력 전체 롤백을 검증했다.
-  - 전체 테스트 65개가 성공했고 실패·오류·skip은 0개이며 `bootJar`와 `git diff --check`가 성공했다.
+  - 리뷰 후 주문 흐름 문서를 실제 `지갑 락 → 기존 주문 current read → 메뉴 조회·금액 계산 → 저장` 순서에 맞췄다.
+  - 유효한 `BIGINT` 메뉴 가격과 수량의 곱셈이 `long`을 넘으면 500이 되던 경로를 재현하고, 곱셈 전 남은 잔액 비교로 `409 INSUFFICIENT_POINTS`를 반환하도록 수정했다.
+  - 리뷰 반영 후 전체 테스트 66개가 성공했고 실패·오류·skip은 0개이며 `bootJar`와 `git diff --check`가 성공했다.
   - PR #27의 필수 `Build and test`가 성공했다.
 - 계획 대비 변경 사항:
   - 이미 확정된 단일 schema 안에서 짧은 순차 SQL 트랜잭션과 락 순서를 명확히 유지하기 위해 예상했던 여러 JPA entity·repository 대신 `JdbcTemplate` 기반 `OrderTransactionExecutor`로 구현했다. 새 domain entity나 repository interface는 만들지 않았다.
   - 같은 사용자 요청이 지갑 락으로 먼저 직렬화되므로 주문 전용 `OrderReplayReader` 없이 같은 transaction의 `FOR UPDATE` current read로 replay를 복원했다. 유니크 제약은 최종 방어선으로 유지했다.
   - 100개 동시 replay 테스트에서 지갑 락 전에 메뉴 일반 조회를 수행하면 MySQL `REPEATABLE READ` snapshot 때문에 선행 주문의 `point_history`를 못 보는 결함을 발견했다. 지갑 락과 기존 주문 확인 뒤 메뉴를 조회하도록 순서를 변경해 재검증했다.
   - 503 응답 변환 전 재시도 횟수와 원인 타입을 민감정보 없이 WARN으로 기록하도록 주문 전용 재시도 예외와 오류 계약 테스트를 추가했다.
+  - PR #27 리뷰에 따라 주문 금액 계산 전에 남은 잔액으로 지불 가능 여부를 판정해 항목 곱셈과 누적 합계의 `long` 오버플로를 함께 방지했다.
   - Flyway schema와 seed, 로컬 실행 프로필·포트 설정은 변경하지 않았다.
 - 검증 명령:
 

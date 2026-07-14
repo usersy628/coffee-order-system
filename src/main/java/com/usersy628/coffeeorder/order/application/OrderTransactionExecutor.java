@@ -65,12 +65,13 @@ public class OrderTransactionExecutor {
 			if (!"ON_SALE".equals(menu.status())) {
 				throw new DomainException(ErrorCode.MENU_NOT_ON_SALE);
 			}
-			long lineAmount = Math.multiplyExact(menu.price(), requested.quantity());
-			totalAmount = Math.addExact(totalAmount, lineAmount);
+			long remainingBalance = balance - totalAmount;
+			if (menu.price() > remainingBalance / requested.quantity()) {
+				throw new DomainException(ErrorCode.INSUFFICIENT_POINTS);
+			}
+			long lineAmount = menu.price() * requested.quantity();
+			totalAmount += lineAmount;
 			items.add(new OrderResult.Item(menu.id(), menu.name(), menu.price(), requested.quantity(), lineAmount));
-		}
-		if (balance < totalAmount) {
-			throw new DomainException(ErrorCode.INSUFFICIENT_POINTS);
 		}
 
 		Instant occurredAt = clock.instant().truncatedTo(ChronoUnit.MICROS);
