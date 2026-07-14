@@ -1,6 +1,7 @@
 package com.usersy628.coffeeorder.support.testcontainers;
 
 import org.flywaydb.core.Flyway;
+import org.flywaydb.core.api.output.MigrateResult;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataAccessException;
@@ -60,6 +61,9 @@ class DatabaseSmokeTest {
 
         assertThat(migrationCount).isEqualTo(2);
         assertThat(tableCount).isEqualTo(7);
+
+        MigrateResult repeatedMigration = flyway.migrate();
+        assertThat(repeatedMigration.migrationsExecuted).isZero();
         assertThatCode(flyway::validate).doesNotThrowAnyException();
 
         try (Connection connection = dataSource.getConnection()) {
