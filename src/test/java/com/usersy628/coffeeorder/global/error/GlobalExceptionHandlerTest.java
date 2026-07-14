@@ -11,6 +11,7 @@ import java.util.Map;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.usersy628.coffeeorder.global.trace.TraceIdFilter;
+import com.usersy628.coffeeorder.order.application.OrderRetryFailureException;
 import com.usersy628.coffeeorder.point.api.PointChargeRequest;
 import com.usersy628.coffeeorder.point.application.PointChargeRetryFailureException;
 import jakarta.validation.Valid;
@@ -186,6 +187,24 @@ class GlobalExceptionHandlerTest {
 			.doesNotContain("review-sensitive-idempotency-key");
 	}
 
+	@Test
+	void logsOrderRetryFailureAsWarnWithAttemptsAndCauseType(CapturedOutput output) throws Exception {
+		MvcResult result = mockMvc.perform(get("/test/order-retry-failure"))
+			.andExpect(status().isServiceUnavailable())
+			.andExpect(jsonPath("$.code").value("CONCURRENT_REQUEST_TIMEOUT"))
+			.andExpect(jsonPath("$.details").isEmpty())
+			.andReturn();
+
+		assertTraceIdMatchesHeader(result);
+		assertThat(output.getOut())
+			.contains(" WARN ")
+			.contains("Order retry failed")
+			.contains("code=CONCURRENT_REQUEST_TIMEOUT")
+			.contains("attempts=3")
+			.contains("causeType=PessimisticLockingFailureException")
+			.doesNotContain("sensitive-order-idempotency-key");
+	}
+
 	private void assertTraceIdMatchesHeader(MvcResult result) throws Exception {
 		String headerTraceId = result.getResponse().getHeader(TraceIdFilter.TRACE_ID_HEADER);
 		JsonNode responseBody = objectMapper.readTree(result.getResponse().getContentAsByteArray());
@@ -231,6 +250,14 @@ class GlobalExceptionHandlerTest {
 			throw new PointChargeRetryFailureException(
 				3,
 				new PessimisticLockingFailureException("review-sensitive-idempotency-key")
+			);
+		}
+
+		@GetMapping("/order-retry-failure")
+		void orderRetryFailure() {
+			throw new OrderRetryFailureException(
+				3,
+				new PessimisticLockingFailureException("sensitive-order-idempotency-key")
 			);
 		}
 

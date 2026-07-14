@@ -5,6 +5,8 @@ import java.util.List;
 import java.util.Map;
 
 import com.usersy628.coffeeorder.global.trace.TraceIdFilter;
+import com.usersy628.coffeeorder.order.api.OrderCreateRequest;
+import com.usersy628.coffeeorder.order.application.OrderRetryFailureException;
 import com.usersy628.coffeeorder.point.api.PointChargeRequest;
 import com.usersy628.coffeeorder.point.application.PointChargeRetryFailureException;
 import org.slf4j.Logger;
@@ -27,6 +29,23 @@ public class GlobalExceptionHandler {
 
 	private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 	private static final String IDEMPOTENCY_KEY_HEADER = "Idempotency-Key";
+
+	@ExceptionHandler(OrderRetryFailureException.class)
+	public ResponseEntity<ApiErrorResponse> handleOrderRetryFailure(OrderRetryFailureException exception) {
+		ErrorCode errorCode = exception.getErrorCode();
+		String traceId = currentTraceId();
+		String causeType = exception.getCause().getClass().getSimpleName();
+		log.warn(
+			"Order retry failed code={} attempts={} causeType={} traceId={}",
+			errorCode.name(),
+			exception.getAttemptCount(),
+			causeType,
+			traceId
+		);
+
+		return ResponseEntity.status(errorCode.getHttpStatus())
+			.body(ApiErrorResponse.from(errorCode, exception.getDetails(), traceId));
+	}
 
 	@ExceptionHandler(PointChargeRetryFailureException.class)
 	public ResponseEntity<ApiErrorResponse> handlePointChargeRetryFailure(
@@ -94,6 +113,12 @@ public class GlobalExceptionHandler {
 			return handleExpectedClientError(ErrorCode.INVALID_IDEMPOTENCY_KEY);
 		}
 
+		boolean invalidOrderRequest = exception.getParameterValidationResults().stream()
+			.anyMatch(result -> OrderCreateRequest.class.equals(result.getMethodParameter().getParameterType()));
+		if (invalidOrderRequest) {
+			return handleExpectedClientError(ErrorCode.INVALID_ORDER_REQUEST);
+		}
+
 		PointChargeRequest invalidChargeRequest = exception.getParameterValidationResults().stream()
 			.filter(result -> PointChargeRequest.class.equals(result.getMethodParameter().getParameterType()))
 			.map(result -> (PointChargeRequest) result.getArgument())
@@ -117,7 +142,8 @@ public class GlobalExceptionHandler {
 
 	@ExceptionHandler(MethodArgumentNotValidException.class)
 	public ResponseEntity<ApiErrorResponse> handleRequestValidation(MethodArgumentNotValidException exception) {
-		if (!(exception.getBindingResult().getTarget() instanceof PointChargeRequest)) {
+		Object target = exception.getBindingResult().getTarget();
+		if (!(target instanceof PointChargeRequest) && !(target instanceof OrderCreateRequest)) {
 			return handleUnexpectedException(exception);
 		}
 		List<Map<String, Object>> fieldErrors = exception.getBindingResult().getFieldErrors().stream()
@@ -132,7 +158,9 @@ public class GlobalExceptionHandler {
 			})
 			.toList();
 		String traceId = currentTraceId();
-		ErrorCode errorCode = ErrorCode.INVALID_CHARGE_AMOUNT;
+		ErrorCode errorCode = target instanceof OrderCreateRequest
+			? ErrorCode.INVALID_ORDER_REQUEST
+			: ErrorCode.INVALID_CHARGE_AMOUNT;
 		log.info("Handled request validation error code={} traceId={}", errorCode.name(), traceId);
 
 		return ResponseEntity.status(errorCode.getHttpStatus())
