@@ -7,7 +7,7 @@
 - 기준 개발 브랜치: `dev`, 현재 HEAD `609cdc8` (PR #28 merge commit)
 - 현재 작업 브랜치: `feature/issue-7-popular-menu-top3`
 - `S9-01` Outbox 게시자와 Mock 데이터 수집 플랫폼: `DONE`, issue #6 `CLOSED`, PR #28 `MERGED`, merge commit `609cdc8`
-- `S10-01` 최근 168시간 인기 메뉴 TOP 3 조회: issue #7 `OPEN`, 구현 준비 `READY`, 상세는 [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md)에 기록
+- `S10-01` 최근 168시간 인기 메뉴 TOP 3 조회: issue #7 `OPEN`, 구현 `IN_PROGRESS`, 상세는 [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md)에 기록
 - 완료 상세와 실제 검증 결과: [`IMPLEMENTATION_HISTORY.md`](IMPLEMENTATION_HISTORY.md)
 
 ## 현재 결정
