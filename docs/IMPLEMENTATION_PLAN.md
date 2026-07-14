@@ -46,7 +46,7 @@
 | [`S5-01`](https://github.com/usersy628/coffee-order-system/issues/1) | `DONE` | 4단계 설계 완료 | 기술 스택·패키지 구조·설정 및 테스트 구성 추천안과 승인 | 선택 사항이 문서화되고 사용자가 승인함 |
 | [`S5-02`](https://github.com/usersy628/coffee-order-system/issues/2) | `DONE` | `S5-01` | Spring Boot·빌드 도구 기본 구조, traceId·공통 오류 기반과 MySQL Testcontainers 환경 | 기본 컨텍스트·공통 예외 smoke test·MySQL smoke 테스트와 빌드 성공 |
 | [`S5-03`](https://github.com/usersy628/coffee-order-system/issues/17) | `DONE` | `S5-02` | 리뷰 후속 공통 MVC 오류·Flyway 재실행 검증·PR CI 기반 보완 | 4xx 계약·migration 재실행·GitHub Actions 검증 성공 |
-| [`S6-01`](https://github.com/usersy628/coffee-order-system/issues/3) | `READY` | `S5-03` | 메뉴 목록 조회 API와 테스트 | 메뉴 목록 계약·통합 테스트 성공 |
+| [`S6-01`](https://github.com/usersy628/coffee-order-system/issues/3) | `IN_PROGRESS` | `S5-03` | 메뉴 목록 조회 API와 테스트 | 메뉴 목록 계약·통합 테스트 성공 |
 | [`S7-01`](https://github.com/usersy628/coffee-order-system/issues/4) | `BACKLOG` | `S5-03` | 포인트 충전·이력·멱등성·동시성과 충전 요청 검증 오류 처리 | 실제 MySQL 단일·중복·경합 충전과 `INVALID_CHARGE_AMOUNT` 계약 테스트 성공 |
 | [`S8-01`](https://github.com/usersy628/coffee-order-system/issues/5) | `BACKLOG` | `S6-01`, `S7-01` | 여러 메뉴 주문·결제·멱등성, 트랜잭션 내 Outbox 저장과 주문 요청 검증 오류 처리 | 실제 MySQL 원자성·중복 요청·동시 주문과 `INVALID_ORDER_REQUEST` 계약 테스트 성공 |
 | [`S9-01`](https://github.com/usersy628/coffee-order-system/issues/6) | `BACKLOG` | `S8-01` | Outbox 게시자와 Mock 데이터 수집 플랫폼 | 2xx 성공, 4xx 즉시 실패, 네트워크·timeout·5xx 최대 5회 재시도, lease·fencing·중복 제거 테스트 성공 |
@@ -123,11 +123,11 @@ git status --short
 gh pr checks
 ```
 
-## 현재 READY 작업
+## 현재 IN_PROGRESS 작업
 
 ### [`S6-01`](https://github.com/usersy628/coffee-order-system/issues/3) 메뉴 목록 조회 API 구현
 
-- 상태: `READY`
+- 상태: `IN_PROGRESS`
 - 목적: 판매 상태와 관계없이 전체 메뉴를 ID 오름차순으로 조회하는 `GET /api/menus`를 구현하고 HTTP 계약부터 실제 MySQL 조회까지 검증한다.
 - 요구사항 근거:
   - `README.md`의 `기술 스택과 프로젝트 구조 > 패키지와 계층 경계`
