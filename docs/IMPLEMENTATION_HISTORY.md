@@ -9,9 +9,9 @@
 ### [`S9-01`](https://github.com/usersy628/coffee-order-system/issues/6) Outbox 게시자와 Mock 데이터 수집 플랫폼 구현
 
 - 상태: `DONE`
-- issue: [#6](https://github.com/usersy628/coffee-order-system/issues/6) `OPEN`
-- PR: [#28](https://github.com/usersy628/coffee-order-system/pull/28) `OPEN`, 필수 `Build and test` 결과는 PR의 최신 check를 기준으로 확인
-- merge commit: 병합 후 기록
+- issue: [#6](https://github.com/usersy628/coffee-order-system/issues/6) `CLOSED`
+- PR: [#28](https://github.com/usersy628/coffee-order-system/pull/28) `MERGED`
+- merge commit: `609cdc8`
 - 완료일: 2026-07-15
 - 구현 커밋: `3fc13a4` (`feat: add outbox publisher (#6)`), `5b729ac` (`fix: address outbox publisher review findings (#6)`)
 - 목적: 주문 트랜잭션이 저장한 `PENDING` Outbox를 짧은 DB 선점 트랜잭션과 별도 HTTP 전송으로 처리하고, 과제용 Mock 소비자의 영속 중복 제거까지 실제 MySQL과 소켓 장애 테스트로 검증한다.
