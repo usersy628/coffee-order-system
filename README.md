@@ -2,7 +2,7 @@
 
 다중 서버 환경에서 동시성, 데이터 일관성, 장애 복구를 고려하는 커피 주문 시스템 과제입니다.
 
-현재는 요구사항 분석, ERD, API 명세와 동시성·트랜잭션·Outbox 상세 전략을 완료한 단계이며, Spring Boot 코드는 이후 단계에서 구현합니다.
+요구사항 분석, ERD, API 명세, 동시성·트랜잭션·Outbox 상세 전략과 기술 스택 승인을 완료했으며, 다음 단계에서 Spring Boot 기본 구조를 구성합니다.
 
 ## 설계 목표와 의도
 
@@ -27,6 +27,105 @@
 - 다중 서버 동시성, 데이터 일관성 및 테스트 고려
 
 회원가입, 사용자 관리, 메뉴 관리, 주문 취소는 이번 과제 범위에 포함하지 않습니다. 사용자와 메뉴는 사전에 존재하며, 사용자를 생성할 때 잔액이 0P인 포인트 지갑도 함께 생성합니다.
+
+## 기술 스택과 프로젝트 구조
+
+### 런타임과 빌드 도구
+
+2026-07-14 기준 공식 지원 범위와 과제 평가 환경의 재현성을 함께 고려하여 다음 조합을 사용합니다.
+
+| 구분 | 선택 | 검토한 대안 | 선택 이유와 트레이드오프 |
+| --- | --- | --- | --- |
+| Java | Java 17 LTS | Java 21·25 LTS | 이번 과제에 Java 21 이상의 언어 기능이 필수는 아니며 현재 학습·평가 환경과의 호환 범위를 넓힙니다. 더 최신 LTS의 지원 기간 이점보다 실행 장벽을 낮추는 것을 우선하며, 필요하면 이후 toolchain 버전만 올릴 수 있습니다. |
+| Spring Boot | `3.5.16` | `4.1.0` | [`3.5.16`은 Java 17~25와 Gradle 8.4 이상을 공식 지원](https://docs.spring.io/spring-boot/3.5/system-requirements.html)하는 stable 버전입니다. 최신 major인 4.1은 [Jakarta EE 11, Jackson 3와 starter 구조 변경](https://github.com/spring-projects/spring-boot/wiki/Spring-Boot-4.0-Migration-Guide)이 있어 이번 과제의 핵심인 트랜잭션·동시성 검증보다 마이그레이션 차이에 설명 비용이 커집니다. |
+| 빌드 | Gradle Wrapper `8.14.3`, Groovy DSL | Maven Wrapper, Gradle Kotlin DSL | [Wrapper](https://docs.gradle.org/current/userguide/gradle_wrapper.html)로 개발자·CI·평가자가 같은 버전을 사용합니다. Groovy DSL은 이 규모에서 설정이 짧고 Spring 예제와 비교하기 쉽습니다. Maven의 명시적인 POM과 Kotlin DSL의 타입 안전성도 장점이지만 별도 이득보다 학습 비용이 큽니다. |
+| 데이터베이스 | MySQL `8.4.10` LTS | MySQL 8.0, 9.x Innovation | [MySQL 8.4 LTS](https://dev.mysql.com/doc/refman/8.4/en/mysql-releases.html)는 기능 안정성과 장기 지원에 초점을 둡니다. 움직이는 `8.4`·`latest` 태그 대신 [8.4.10](https://dev.mysql.com/doc/relnotes/mysql/8.4/en/)을 Docker Compose와 Testcontainers에 같이 고정하여 재현성을 확보합니다. |
+| 스키마 관리 | Flyway versioned migration | Hibernate DDL, `schema.sql` | `db/migration`을 스키마 변경의 단일 경로로 사용하고 Hibernate는 `ddl-auto=validate`로 매핑만 검증합니다. MySQL 지원을 위해 [`flyway-mysql` 모듈](https://documentation.red-gate.com/fd/mysql-277579322.html)을 명시합니다. |
+
+Spring Boot가 BOM으로 관리하는 Spring Framework, Hibernate, MySQL Connector/J, Flyway, HikariCP와 Testcontainers 버전은 개별 재정의하지 않습니다. 보안 수정이나 실제 호환성 문제가 있을 때만 근거와 검증 결과를 남기고 override합니다. Flyway 공식 검증 버전 표의 갱신 시점과 MySQL 8.4 LTS 사이에 문서 공백이 있을 수 있으므로 빈 `mysql:8.4.10` 컨테이너에 migration을 적용하고 재시작 시 `validate`까지 성공하는 smoke test를 필수로 둡니다.
+
+### 기본 의존성과 테스트 도구
+
+| 목적 | 의존성 | 적용 시점 |
+| --- | --- | --- |
+| MVC API와 입력 검증 | `spring-boot-starter-web`, `spring-boot-starter-validation` | 기본 구조 |
+| 영속성과 운영 확인 | `spring-boot-starter-data-jpa`, `spring-boot-starter-actuator` | 기본 구조 |
+| DB와 migration | `mysql-connector-j`, `flyway-core`, `flyway-mysql` | 기본 구조 |
+| 외부 데이터 플랫폼 HTTP | Spring Web의 `RestClient`, Apache HttpClient 5 | Outbox 게시자 |
+| 단위·API 테스트 | `spring-boot-starter-test`, Spring Test의 `MockRestServiceServer` | 기본 구조와 기능별 테스트 |
+| 실제 MySQL 통합 테스트 | `spring-boot-testcontainers`, Testcontainers JUnit·MySQL | 기본 구조 |
+| 실제 소켓 장애 테스트 | WireMock | Outbox 게시자 |
+
+Lombok은 엔티티 생성 규칙을 숨기고 IDE plugin 의존성을 늘리므로 사용하지 않고, DTO는 적합한 곳에서 Java `record`를 사용합니다. Redis, Kafka, Spring Retry, WebFlux와 H2도 초기 의존성에 넣지 않습니다. 재시도 상태는 Outbox DB가 관리하고, MySQL의 락·격리 수준·`SKIP LOCKED`를 검증해야 하므로 H2 테스트는 실제 동작을 대체할 수 없습니다.
+
+Actuator는 health와 기본 Micrometer 지표를 얻기 위한 기반으로만 사용합니다. 공개 API 경로와 분리하고 초기에는 필요한 endpoint만 노출하며, Prometheus 같은 별도 registry는 부하 테스트에서 실제 필요가 확인될 때 추가합니다.
+
+### 패키지와 계층 경계
+
+기본 패키지는 `com.usersy628.coffeeorder`입니다. 최상위에 `controller`, `service`, `repository`를 수평으로 모으지 않고 기능을 먼저 나눈 뒤 기능 안에서 계층을 구분합니다.
+
+```text
+com.usersy628.coffeeorder
+├── CoffeeOrderApplication
+├── global
+│   ├── config
+│   ├── error
+│   ├── time
+│   └── trace
+├── user
+│   ├── domain
+│   └── infrastructure
+├── menu
+│   ├── api
+│   ├── application
+│   ├── domain
+│   └── infrastructure
+├── point
+│   ├── api
+│   ├── application
+│   ├── domain
+│   └── infrastructure
+├── order
+│   ├── api
+│   ├── application
+│   ├── domain
+│   └── infrastructure
+├── popularity
+│   ├── api
+│   ├── application
+│   └── infrastructure
+└── outbox
+    ├── application
+    ├── domain
+    └── infrastructure
+        ├── http
+        ├── persistence
+        └── scheduling
+```
+
+각 기능은 필요한 계층만 만들며 빈 package를 미리 생성하지 않습니다.
+
+- `api`: Controller와 HTTP 요청·응답 DTO를 둡니다. 트랜잭션과 비즈니스 규칙을 넣지 않습니다.
+- `application`: 유스케이스, 트랜잭션 경계와 외부 의존성 port를 둡니다. 락·멱등성·재시도 순서를 조정합니다.
+- `domain`: 엔티티, 값, 상태와 도메인 불변식을 둡니다. 이번 단일 애플리케이션에서는 JPA annotation을 허용하되 Controller나 외부 HTTP 타입에는 의존하지 않습니다.
+- `infrastructure`: Spring Data JPA adapter, native SQL, HTTP client와 scheduler 구현을 둡니다.
+- `global`: 오류 계약, traceId, 시간과 공통 기술 설정처럼 실제 횡단 관심사만 둡니다. 도메인별 편의 함수를 `global`에 모으지 않습니다.
+
+순수 헥사고날 구조를 기계적으로 적용하여 모든 클래스에 interface를 만들지는 않습니다. 외부 데이터 플랫폼, 시간, aggregate 저장처럼 교체하거나 격리 테스트할 실제 경계에만 port를 두어 구조적 설명 가능성과 과제 규모를 맞춥니다.
+
+Spring proxy를 우회하는 self-invocation을 막기 위해 충전과 주문의 일시적 DB 충돌 재시도 coordinator, 실제 `@Transactional(timeout = 5)` 명령 executor와 유니크 충돌 후 기존 결과를 읽는 새 read-only transaction reader는 서로 다른 Spring Bean으로 분리합니다. 재시도 coordinator가 실패한 전체 명령을 transaction 밖에서 다시 호출하고, 예외가 발생한 transaction 안에서는 기존 결과를 조회하거나 처리를 계속하지 않습니다. 정확한 클래스명과 경로는 각 기능 이슈를 `READY`로 전환할 때 확정합니다.
+
+### 설정, 초기 데이터와 테스트 구성
+
+- `application.yml`에는 UTC, JPA `ddl-auto=validate`, Open Session In View 비활성화와 공통 설정을 둡니다.
+- `application-local.yml`은 환경 변수로 로컬 MySQL에 연결하고, `compose.yaml`은 `mysql:8.4.10`을 실행합니다. 저장소에는 운영 비밀번호를 두지 않습니다.
+- `application-test.yml`에는 고정 JDBC URL을 넣지 않고 `MySQLContainer`와 `@ServiceConnection`이 JDBC와 Flyway 연결 정보를 제공합니다.
+- HikariCP는 인스턴스당 최대 10개 연결, 연결 획득 대기 2초, 검증 대기 1초로 시작하고 `connectionInitSql`로 새 MySQL session의 `innodb_lock_wait_timeout`을 2초로 설정합니다.
+- Hikari 연결 획득 대기 2초, MySQL 행 락 대기 2초와 명령 트랜잭션 timeout 5초는 서로 다른 제한입니다. 연결 획득은 트랜잭션 시작 전에 발생할 수 있으므로 명령 트랜잭션 5초에 항상 포함된다고 가정하지 않습니다.
+- Flyway `V1`은 ERD의 schema를 만들고 `V2`는 과제 실행에 필요한 사용자·메뉴와 각 사용자의 0P 지갑을 함께 삽입합니다. `V2`는 과제용 고정 초기 데이터이며 실제 서비스에서는 환경별 기준 데이터를 schema migration과 분리합니다. 테스트별 가변 데이터는 migration에 넣지 않고 test fixture에서 생성합니다.
+- 단위 테스트는 시간·해시·금액 같은 순수 규칙, MVC slice는 API 계약, MySQL Testcontainers 통합 테스트는 FK·CHECK·락·트랜잭션과 native query에 집중합니다. 핵심 통합 테스트는 Docker가 없다고 건너뛰지 않고 실행 환경 문제를 드러냅니다.
+
+외부 데이터 플랫폼 adapter는 `RestClient`와 Apache HttpClient 5를 사용하고 HTTP client 내부 자동 재시도를 끕니다. connection pool 대기, DNS·TLS·connect와 read를 포함한 시도당 5초 전체 예산은 구성값과 외부 watchdog으로 제한하고 WireMock 실제 소켓 테스트에서 경과 시간과 호출 횟수를 검증합니다. 이 합격 조건을 만족하지 못하면 `DataPlatformClient` port는 유지한 채 `S9-01`에서 adapter 선택을 다시 검토합니다. 재시도 횟수와 백오프의 유일한 소유자는 계속 Outbox입니다.
 
 ## 핵심 정책
 
