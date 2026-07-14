@@ -7,7 +7,7 @@
 - 기준 브랜치 `dev`의 확인 HEAD: `2fde3f2` (PR #24 merge commit)
 - `S7-01` 포인트 충전 API: `DONE`, issue #4 `CLOSED`, PR #24 `MERGED`
 - PR #24의 손상된 한글 본문을 UTF-8 `--body-file`로 복구했고 GitHub 원본에서 한글 제목과 예상하지 않은 리터럴 `?`가 없음을 확인함
-- `DOC-01` 구현 계획과 완료 이력 분리: 문서 변경 `DONE`, issue #25, 브랜치 `feature/issue-25-implementation-history`, PR 생성 준비
+- `DOC-01` 구현 계획과 완료 이력 분리: 문서 변경 `DONE`, issue #25, PR #26 `OPEN`, 핵심 커밋 `318e53f`
 - `S8-01` 주문·포인트 결제·멱등성: `BACKLOG`, issue #5 `OPEN`, 구현 브랜치 없음
 
 ## 문서 기준
@@ -25,4 +25,4 @@
 
 ## 다음 행동
 
-`DOC-01` 문서 정합성을 검증하고 issue #25를 연결한 `dev` 대상 PR을 만든 뒤 검토 대기 상태로 인수인계한다.
+PR #26의 필수 CI 결과를 확인하고, 별도 검토와 사용자의 명시적 병합 승인을 기다린다.
