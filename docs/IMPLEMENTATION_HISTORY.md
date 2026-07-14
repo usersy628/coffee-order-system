@@ -11,7 +11,7 @@
 - 상태: `DONE`
 - issue: [#25](https://github.com/usersy628/coffee-order-system/issues/25)
 - PR: [#26](https://github.com/usersy628/coffee-order-system/pull/26)
-- merge commit: 병합 후 기록
+- merge commit: `14d8637`
 - 완료일: 2026-07-15
 - 완료 커밋: `318e53f`
 - 목적: 완료된 작업 상세를 별도 History로 옮겨 활성 계획의 길이와 컨텍스트 비용을 줄이면서 계획과 실제 결과의 추적성을 유지한다.
