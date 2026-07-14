@@ -8,7 +8,7 @@
 - 현재 작업 브랜치: `feature/issue-8-mysql-regression-load-baseline`
 - `S9-01` Outbox 게시자와 Mock 데이터 수집 플랫폼: `DONE`, issue #6 `CLOSED`, PR #28 `MERGED`, merge commit `609cdc8`
 - `S10-01` 최근 168시간 인기 메뉴 TOP 3 조회: `DONE`, issue #7 `CLOSED`, PR [#29](https://github.com/usersy628/coffee-order-system/pull/29) `MERGED`, merge commit `c2243a6`
-- `S11-01` 기능 간 MySQL 회귀, 부하 기준선과 실행계획 검증: `IN_PROGRESS`, issue #8 `OPEN`; 문서 준비 커밋 `9dc903f`, 구현 커밋 `8e69ec2`. 실제 MySQL 교차 회귀와 전체 30일 분포의 100,000/300,000 `EXPLAIN ANALYZE` profile을 통과했다. Testcontainers plan은 `order_item` scan을 선택했으며, 근거 없이 인덱스를 추가하지 않는다. `local,perf`·`18081`·전용 MySQL `3308` live k6 기준선도 실행했지만 p95 3,074.07 ms, 시스템 오류율 51.87%, dropped iterations 2,569로 SLO를 통과하지 못했다. Hikari 최대 10개가 포화되고 최대 50개가 대기한 실측 근거는 [`S11_BASELINE.md`](performance/S11_BASELINE.md)에 보존했다.
+- `S11-01` 기능 간 MySQL 회귀, 부하 기준선과 실행계획 검증: `IN_PROGRESS`, issue #8 `OPEN`, PR [#30](https://github.com/usersy628/coffee-order-system/pull/30) `OPEN`; 문서 준비 커밋 `9dc903f`, 구현 커밋 `8e69ec2`, 결과 기록 커밋 `1badf16`. 실제 MySQL 교차 회귀와 전체 30일 분포의 100,000/300,000 `EXPLAIN ANALYZE` profile을 통과했다. Testcontainers plan은 `order_item` scan을 선택했으며, 근거 없이 인덱스를 추가하지 않는다. `local,perf`·`18081`·전용 MySQL `3308` live k6 기준선도 실행했지만 p95 3,074.07 ms, 시스템 오류율 51.87%, dropped iterations 2,569로 SLO를 통과하지 못했다. Hikari 최대 10개가 포화되고 최대 50개가 대기한 실측 근거는 [`S11_BASELINE.md`](performance/S11_BASELINE.md)에 보존했다.
 - 완료 상세와 실제 검증 결과: [`IMPLEMENTATION_HISTORY.md`](IMPLEMENTATION_HISTORY.md)
 
 ## 현재 결정
@@ -24,4 +24,4 @@
 
 ## 다음 행동
 
-S11의 실측 결과 문서를 커밋·push한 뒤 `dev` 대상 PR을 만들고, 기준선 실패 사실과 Hikari 포화 근거를 포함해 별도 검토를 기다린다. 성능 개선 구현이나 병합은 검토와 사용자의 명시적 승인 전에는 진행하지 않는다.
+PR [#30](https://github.com/usersy628/coffee-order-system/pull/30)의 코드·문서·live 기준선 실패 근거를 별도 검토한다. 성능 개선 구현이나 병합은 검토와 사용자의 해당 PR 명시적 승인 전에는 진행하지 않는다.
