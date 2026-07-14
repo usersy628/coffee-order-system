@@ -20,13 +20,19 @@ class OutboxPublisherPropertiesTest {
 	}
 
 	@Test
-	void rejectsMoreAttemptsThanTheOutboxSchemaCanRepresent() {
+	void rejectsAnyMaxAttemptsSettingOtherThanTheApprovedSixAttempts() {
 		OutboxPublisherProperties properties = new OutboxPublisherProperties();
+		properties.setMaxAttempts(5);
+
+		assertThatThrownBy(properties::validate)
+			.isInstanceOf(IllegalStateException.class)
+			.hasMessageContaining("fixed at 6");
+
 		properties.setMaxAttempts(7);
 
 		assertThatThrownBy(properties::validate)
 			.isInstanceOf(IllegalStateException.class)
-			.hasMessageContaining("between 1 and 6");
+			.hasMessageContaining("fixed at 6");
 	}
 
 	@Test

@@ -13,10 +13,7 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.SynchronousQueue;
 import java.util.concurrent.ThreadFactory;
-import java.util.concurrent.ThreadPoolExecutor;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 @Configuration(proxyBeanMethods = false)
@@ -48,26 +45,25 @@ public class OutboxHttpConfiguration {
 	@Bean(name = "outboxPublisherExecutor", destroyMethod = "shutdown")
 	ExecutorService outboxPublisherExecutor(OutboxPublisherProperties properties) {
 		return Executors.newFixedThreadPool(
-			properties.getMaxConcurrency(), namedThreadFactory("outbox-publisher-")
+			properties.getMaxConcurrency(), namedThreadFactory("outbox-publisher-", false)
 		);
 	}
 
-	@Bean(name = "outboxDeadlineExecutor", destroyMethod = "shutdown")
-	ExecutorService outboxDeadlineExecutor(OutboxPublisherProperties properties) {
+	@Bean(name = "outboxDeadlineExecutor", destroyMethod = "close")
+	OutboxDeadlineExecutor outboxDeadlineExecutor(OutboxPublisherProperties properties) {
 		int maxConcurrency = properties.getMaxConcurrency();
-		return new ThreadPoolExecutor(
+		return new OutboxDeadlineExecutor(
 			maxConcurrency,
-			maxConcurrency,
-			0L,
-			TimeUnit.MILLISECONDS,
-			new SynchronousQueue<>(),
-			namedThreadFactory("outbox-http-deadline-"),
-			new ThreadPoolExecutor.AbortPolicy()
+			namedThreadFactory("outbox-http-deadline-", true)
 		);
 	}
 
-	private ThreadFactory namedThreadFactory(String prefix) {
+	private ThreadFactory namedThreadFactory(String prefix, boolean daemon) {
 		AtomicInteger sequence = new AtomicInteger();
-		return runnable -> new Thread(runnable, prefix + sequence.incrementAndGet());
+		return runnable -> {
+			Thread thread = new Thread(runnable, prefix + sequence.incrementAndGet());
+			thread.setDaemon(daemon);
+			return thread;
+		};
 	}
 }

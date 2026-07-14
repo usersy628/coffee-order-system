@@ -11,21 +11,26 @@ import java.time.Duration;
 @ConfigurationProperties("coffee-order.outbox.publisher")
 public class OutboxPublisherProperties {
 
+	private static final int TOTAL_ATTEMPTS = 6;
+
 	private boolean enabled;
 	private Duration pollInterval = Duration.ofSeconds(1);
 	private int batchSize = 10;
 	private int maxConcurrency = 10;
 	private Duration httpCallTimeout = Duration.ofSeconds(5);
 	private Duration leaseTimeout = Duration.ofSeconds(30);
-	private int maxAttempts = 6;
+	private int maxAttempts = TOTAL_ATTEMPTS;
 	private Duration initialBackoff = Duration.ofSeconds(1);
 	private double jitterFactor = 0.2;
 	private String dataPlatformBaseUrl = "";
 
 	@PostConstruct
 	void validate() {
-		if (batchSize < 1 || maxConcurrency < 1 || maxAttempts < 1 || maxAttempts > 6) {
-			throw new IllegalStateException("Outbox batch size and concurrency must be positive, and max attempts must be between 1 and 6");
+		if (batchSize < 1 || maxConcurrency < 1) {
+			throw new IllegalStateException("Outbox batch size and concurrency must be positive");
+		}
+		if (maxAttempts != TOTAL_ATTEMPTS) {
+			throw new IllegalStateException("Outbox max attempts is fixed at " + TOTAL_ATTEMPTS);
 		}
 		if (!isPositive(pollInterval)
 			|| !isPositive(httpCallTimeout)

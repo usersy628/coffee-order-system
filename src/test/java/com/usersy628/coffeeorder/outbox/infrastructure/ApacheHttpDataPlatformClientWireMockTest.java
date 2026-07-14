@@ -17,6 +17,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
 import static com.github.tomakehurst.wiremock.client.WireMock.containing;
@@ -146,6 +147,38 @@ class ApacheHttpDataPlatformClientWireMockTest {
 			wireMockServer.verify(0, postRequestedFor(urlEqualTo(EVENT_PATH)));
 		} finally {
 			releaseWorker.countDown();
+		}
+	}
+
+	@Test
+	void closesDeadlineWorkersWithInterruptAndDoesNotLetThemBlockJvmShutdown() throws Exception {
+		OutboxPublisherProperties properties = new OutboxPublisherProperties();
+		properties.setMaxConcurrency(1);
+		OutboxDeadlineExecutor executor = new OutboxHttpConfiguration().outboxDeadlineExecutor(properties);
+		CountDownLatch workerStarted = new CountDownLatch(1);
+		CountDownLatch workerInterrupted = new CountDownLatch(1);
+		AtomicBoolean daemonWorker = new AtomicBoolean();
+		try {
+			executor.submit(() -> {
+				daemonWorker.set(Thread.currentThread().isDaemon());
+				workerStarted.countDown();
+				try {
+					new CountDownLatch(1).await();
+				} catch (InterruptedException exception) {
+					workerInterrupted.countDown();
+					Thread.currentThread().interrupt();
+				}
+			});
+
+			assertThat(workerStarted.await(2, TimeUnit.SECONDS)).isTrue();
+
+			executor.close();
+
+			assertThat(daemonWorker.get()).isTrue();
+			assertThat(workerInterrupted.await(1, TimeUnit.SECONDS)).isTrue();
+			assertThat(executor.isTerminated()).isTrue();
+		} finally {
+			executor.close();
 		}
 	}
 
