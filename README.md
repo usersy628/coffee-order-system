@@ -37,6 +37,8 @@
 - 충전 후 총잔액은 300,000P를 초과할 수 없고, 잔액은 음수가 될 수 없습니다.
 - 잔액 변경과 포인트 이력 저장은 하나의 트랜잭션으로 처리합니다.
 - 다중 서버 동시성은 `SELECT ... FOR UPDATE`를 이용한 DB 비관적 락으로 제어합니다.
+- 충전 API도 `Idempotency-Key`를 필수로 받아 응답 유실 후 재요청으로 같은 금액이 중복 충전되는 것을 방지합니다.
+- 충전 멱등 키와 `amount`의 SHA-256 요청 해시는 `point_history`의 `CHARGE` 이력에 저장합니다.
 - 외부 API는 포인트 지갑 락을 보유한 트랜잭션 안에서 호출하지 않습니다.
 
 ### 주문
@@ -57,8 +59,9 @@
 - 메뉴 ID로 정렬한 `menuId`와 `quantity` 목록을 canonical payload로 만들고 SHA-256 해시를 저장합니다.
 - 같은 키와 같은 요청이면 새 결제 없이 기존 주문 결과를 반환합니다.
 - 같은 키와 다른 요청이면 `409 Conflict`와 `IDEMPOTENCY_KEY_REUSED` 오류를 반환합니다.
-- 같은 키의 동시 요청은 선행 트랜잭션이 끝날 때까지 DB 유니크 인덱스에서 대기합니다. 충돌이 확인되면 현재 트랜잭션을 롤백하고 새 트랜잭션에서 기존 주문과 요청 해시를 조회합니다.
-- 선행 요청이 롤백되면 멱등성 행도 남지 않으므로 후행 요청이 정상적으로 주문을 처리할 수 있습니다.
+- 같은 사용자의 주문과 충전은 모두 지갑 행을 먼저 잠근 뒤 멱등 결과를 다시 확인하여 사용자별로 직렬화합니다.
+- 유니크 제약 충돌이 발생하면 예외가 난 트랜잭션에서 조회를 계속하지 않고 전체 롤백 후 새 읽기 전용 트랜잭션에서 기존 결과를 조회합니다.
+- 주문과 충전의 멱등 키는 각 도메인 테이블에 영구 보관하므로 클라이언트는 매 요청에 새 UUID를 사용하고 과거 키를 재사용하지 않습니다. 실패 결과나 처리 중 상태, 키 만료까지 저장해야 한다면 별도 멱등성 테이블로 확장합니다.
 
 ### 외부 데이터 플랫폼
 
@@ -85,14 +88,15 @@
 
 - 기본 경로는 `/api`이며 현재 과제에서는 URL 버전을 포함하지 않습니다. 경로가 단순한 대신 향후 호환되지 않는 변경이 생기면 새 경로나 헤더 기반 버전 전략을 별도로 도입해야 합니다.
 - 사용자 인증은 과제 범위 밖이므로 사용자 식별자는 경로의 `{userId}`로 전달합니다.
+- 실제 운영 서비스에서는 경로 값만 신뢰하지 않고 인증 principal의 사용자 ID와 대조하여 다른 사용자의 자원에 접근하지 못하게 해야 합니다.
 - `{userId}`는 1 이상의 정수여야 하며 형식이 잘못되면 `400 Bad Request`와 `INVALID_USER_ID`를 반환합니다.
 - 요청과 응답은 `application/json`이며 JSON 필드명은 `camelCase`를 사용합니다.
-- ID, 수량과 금액은 JSON 정수로 표현합니다. 금액 단위는 원이자 포인트입니다.
+- ID, 수량과 금액은 JSON 정수로 표현합니다. 금액 단위는 원이자 포인트입니다. 공개 웹 API로 확장되어 `BIGINT` ID가 JavaScript 안전 정수 범위를 넘을 수 있다면 ID 문자열 반환을 검토합니다.
 - 성공 응답은 공통 래퍼 없이 각 API의 결과를 직접 반환합니다.
 - API 시간은 ISO 8601 형식과 한국시간 오프셋을 포함하여 `2026-07-14T15:30:00+09:00`처럼 반환합니다.
 - 서버 내부와 DB에는 동일한 시각을 UTC로 저장하고 API 경계에서 `Asia/Seoul`로 변환합니다.
 
-공통 오류 응답은 다음 형식을 사용합니다. `details`는 필드 오류처럼 추가 정보가 있을 때 사용하고, 없으면 빈 객체를 반환합니다.
+공통 오류 응답은 다음 형식을 사용합니다. 클라이언트 분기는 번역될 수 있는 `message`가 아니라 `code`를 사용합니다. `details`는 필드 오류처럼 추가 정보가 있을 때 사용하고, 없으면 빈 객체를 반환하며 `traceId`는 서버 로그와 요청을 연결하는 식별자입니다.
 
 ```json
 {
@@ -101,7 +105,8 @@
   "details": {
     "field": "amount",
     "rejectedValue": 0
-  }
+  },
+  "traceId": "0af7651916cd43dd8448eb211c80319c"
 }
 ```
 
@@ -138,7 +143,7 @@ GET /api/menus
     "menuId": 2,
     "name": "카페라테",
     "price": 5000,
-    "status": "STOPPED"
+    "status": "ON_SALE"
   }
 ]
 ```
@@ -147,11 +152,12 @@ GET /api/menus
 
 ### 포인트 충전
 
-`userId`는 1 이상의 정수이고 `amount`는 1P 이상 300,000P 이하의 정수여야 합니다. 충전 후 잔액이 300,000P를 초과하면 전체 요청을 실패시킵니다.
+`userId`는 1 이상의 정수이고 `amount`는 1P 이상 300,000P 이하의 정수여야 합니다. 충전 후 잔액이 300,000P를 초과하면 전체 요청을 실패시킵니다. `Idempotency-Key`는 공백이 아닌 1자 이상 255자 이하의 필수 헤더입니다.
 
 ```http
 POST /api/users/1/points/charges
 Content-Type: application/json
+Idempotency-Key: f64e1530-e93b-40ce-a6e6-886d89d5fbbc
 ```
 
 ```json
@@ -160,7 +166,7 @@ Content-Type: application/json
 }
 ```
 
-성공 응답: `200 OK`
+최초 성공 응답: `200 OK`, `Idempotency-Replayed: false`
 
 ```json
 {
@@ -171,12 +177,17 @@ Content-Type: application/json
 }
 ```
 
+`amount`만 포함한 canonical payload의 SHA-256을 저장합니다. 같은 키와 같은 금액을 다시 보내면 새 충전 없이 `200 OK`, `Idempotency-Replayed: true`와 최초 `point_history.balance_after`, `created_at`으로 복원한 응답을 반환합니다. 같은 키와 다른 금액이면 `409 Conflict`로 실패합니다.
+
 | 조건 | HTTP 상태 | 오류 코드 |
 | --- | --- | --- |
 | 사용자 ID 형식 오류 | `400` | `INVALID_USER_ID` |
+| 멱등 키 누락 | `400` | `IDEMPOTENCY_KEY_REQUIRED` |
+| 멱등 키 길이 또는 형식 오류 | `400` | `INVALID_IDEMPOTENCY_KEY` |
 | 충전 금액 형식·범위 오류 | `400` | `INVALID_CHARGE_AMOUNT` |
 | 사용자 없음 | `404` | `USER_NOT_FOUND` |
 | 충전 후 총잔액 한도 초과 | `409` | `POINT_LIMIT_EXCEEDED` |
+| 같은 멱등 키와 다른 금액 | `409` | `IDEMPOTENCY_KEY_REUSED` |
 
 ### 여러 메뉴 주문 및 포인트 결제
 
@@ -277,6 +288,61 @@ GET /api/menus/popular
 
 조회 시각 `T`를 한 번 얻어 `[T - 168시간, T)`를 집계하고 `from`과 `to`에도 같은 경계를 사용합니다. 메뉴명은 현재 메뉴명을 반환하며, 메뉴별 판매 수량 내림차순과 메뉴 ID 오름차순으로 순위를 결정합니다. 집계 결과가 없으면 `items`를 빈 배열로 반환합니다.
 
+## 동시성 및 트랜잭션 상세 전략
+
+포인트 잔액을 변경하는 충전과 주문은 모두 같은 `point_wallet` 행을 직렬화 지점으로 사용합니다. 애플리케이션의 사전 조회는 빠른 재응답을 위한 최적화일 뿐이며, 지갑 락 획득 후 멱등 결과를 반드시 다시 확인합니다.
+
+### 포인트 충전 흐름
+
+```mermaid
+sequenceDiagram
+    participant C as Client
+    participant A as Application
+    participant DB as MySQL
+
+    C->>A: 충전 요청 + Idempotency-Key
+    A->>A: 입력 검증 및 요청 해시 계산
+    A->>DB: 기존 CHARGE 이력 선조회
+    alt 이미 완료된 같은 요청
+        DB-->>A: 기존 이력
+        A-->>C: 200, Replayed=true
+    else 처리 필요
+        A->>DB: BEGIN
+        A->>DB: point_wallet SELECT FOR UPDATE
+        A->>DB: 멱등 CHARGE 이력 재조회
+        alt 락 대기 중 선행 요청 완료
+            A->>DB: ROLLBACK
+            A-->>C: 200, Replayed=true
+        else 새 충전
+            A->>DB: 한도 검증, 지갑 증가, CHARGE 이력 저장
+            A->>DB: COMMIT
+            A-->>C: 200, Replayed=false
+        end
+    end
+```
+
+### 주문 및 결제 흐름
+
+1. 트랜잭션 밖에서 형식 검증, 중복 메뉴 확인, canonical payload와 요청 해시를 계산합니다.
+2. 커밋된 기존 주문을 선조회하여 같은 요청이면 빠르게 재응답합니다.
+3. 트랜잭션에서 메뉴 존재 여부와 판매 상태를 확인하고 DB 가격으로 총액을 계산합니다. 현재 과제에서는 메뉴 관리가 없어 메뉴 행 락을 추가하지 않습니다.
+4. `point_wallet`을 `SELECT ... FOR UPDATE`로 잠급니다.
+5. 지갑 락을 획득한 뒤 `(user_id, idempotency_key)`를 다시 조회합니다. 대기 중 선행 주문이 커밋되었다면 현재 트랜잭션을 종료하고 그 결과를 반환합니다.
+6. 잔액을 검증한 뒤 주문, 주문 항목, 지갑 차감, `USE` 이력과 Outbox 이벤트를 저장하고 한 번에 커밋합니다.
+7. 유니크 충돌은 전체 롤백하고 새 읽기 전용 트랜잭션에서 요청 해시를 비교합니다. 충돌 예외가 발생한 트랜잭션을 재사용하지 않습니다.
+
+향후 메뉴 수정 기능이 추가되면 가격 및 판매 상태 변경과 주문 사이의 정책을 정하고 메뉴 행 락 또는 버전 기반 재검증을 도입합니다.
+
+### 락 순서, 타임아웃과 재시도
+
+- 모든 잔액 변경 경로는 `point_wallet`을 먼저 잠근 뒤 주문 또는 충전 멱등 데이터를 생성합니다. 같은 자원을 서로 다른 순서로 잠그지 않습니다.
+- 트랜잭션 안에서는 DB 작업만 수행하고 외부 HTTP 호출, 대기와 긴 계산을 하지 않습니다.
+- 데드락 또는 락 획득 타임아웃은 비즈니스 실패가 아니라 일시적인 인프라 충돌로 분류합니다.
+- 재시도는 실패한 SQL 한 문장이 아니라 트랜잭션 경계 밖에서 전체 명령을 새 트랜잭션으로 수행합니다.
+- 최초 시도 후 최대 2회 재시도하며 50ms, 100ms 기준 지수 백오프와 ±20% jitter를 적용합니다. 이 값은 설정으로 분리합니다.
+- 재시도 소진 시 `503 Service Unavailable`, `CONCURRENT_REQUEST_TIMEOUT`을 반환하고 클라이언트는 같은 멱등 키로 안전하게 다시 요청할 수 있습니다.
+- 구현 테스트에서는 동일 사용자 100개 동시 요청, 서로 다른 사용자 병렬 요청, 강제 데드락과 락 타임아웃을 검증합니다.
+
 ## ERD
 
 ```mermaid
@@ -307,6 +373,8 @@ erDiagram
         BIGINT amount
         BIGINT balance_after
         BIGINT order_id FK
+        VARCHAR idempotency_key
+        CHAR request_hash
         DATETIME created_at
     }
 
@@ -322,7 +390,7 @@ erDiagram
     ORDERS {
         BIGINT id PK
         BIGINT user_id FK
-        VARCHAR idempotency_key UK
+        VARCHAR idempotency_key
         CHAR request_hash
         BIGINT total_amount
         VARCHAR status
@@ -392,12 +460,16 @@ erDiagram
 | `amount` | `BIGINT` | NOT NULL | 충전은 양수, 사용은 음수 |
 | `balance_after` | `BIGINT` | NOT NULL | 변경 직후 잔액 |
 | `order_id` | `BIGINT` | FK, NULL 허용, UNIQUE | 사용 이력의 주문 |
+| `idempotency_key` | `VARCHAR(255)` | NULL 허용 | 충전 멱등 키 |
+| `request_hash` | `CHAR(64)` | NULL 허용 | 충전 canonical payload의 SHA-256 |
 | `created_at` | `DATETIME(6)` | NOT NULL | 잔액 변경 시각 |
 
-- `CHARGE`이면 `amount > 0`, `order_id IS NULL`이어야 합니다.
-- `USE`이면 `amount < 0`, `order_id IS NOT NULL`이어야 합니다.
+- `CHARGE`이면 `amount > 0`, `order_id IS NULL`, `idempotency_key IS NOT NULL`, `request_hash IS NOT NULL`이어야 합니다.
+- `USE`이면 `amount < 0`, `order_id IS NOT NULL`, `idempotency_key IS NULL`, `request_hash IS NULL`이어야 합니다.
 - `CHECK (balance_after BETWEEN 0 AND 300000)`을 적용합니다.
 - `UNIQUE (order_id)`로 한 주문에 포인트 사용 이력이 중복 생성되는 것을 방지합니다. MySQL 유니크 인덱스는 여러 `NULL`을 허용하므로 충전 이력에는 영향을 주지 않습니다.
+- `UNIQUE (user_id, idempotency_key)`로 충전 재요청의 중복 반영을 방지합니다. `USE` 이력의 `NULL`에는 영향을 주지 않습니다.
+- `idempotency_key`는 대소문자를 구분하는 `utf8mb4_bin` 계열 collation을 적용합니다.
 - `FOREIGN KEY (user_id) REFERENCES point_wallet(user_id) ON DELETE RESTRICT`
 - `FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE RESTRICT`
 
@@ -502,6 +574,7 @@ FOR UPDATE SKIP LOCKED;
 | `order_item` | `UNIQUE (order_id, menu_id)` | 주문 내 메뉴 중복 방지 |
 | `order_item` | `INDEX (order_id, menu_id, quantity)` | 인기 메뉴 조인 및 수량 집계 |
 | `point_history` | `UNIQUE (order_id)` | 주문별 중복 차감 방지 |
+| `point_history` | `UNIQUE (user_id, idempotency_key)` | 사용자별 충전 멱등성 보장 |
 | `point_history` | `INDEX (user_id, created_at, id)` | 사용자 포인트 이력 조회 |
 | `order_event_outbox` | `UNIQUE (event_id)` | 이벤트 식별자 중복 방지 |
 | `order_event_outbox` | `UNIQUE (order_id, event_type)` | 주문 이벤트 중복 생성 방지 |
@@ -525,6 +598,7 @@ FOR UPDATE SKIP LOCKED;
 | 문제 | 선택한 전략 | 검토한 대안 | 선택 이유 | 트레이드오프 및 보완 |
 | --- | --- | --- | --- | --- |
 | 다중 서버 포인트 동시성 | DB 비관적 락 `SELECT ... FOR UPDATE` | JVM `synchronized`, 낙관적 락 | 모든 서버가 공유하는 지갑 행을 잠가 검증과 갱신을 직렬화하고 잔액 음수를 방지합니다. | 동일 사용자 요청은 대기하므로 트랜잭션을 짧게 유지하고 외부 API를 락 밖에서 호출합니다. |
+| 충전 멱등성 | `point_history`에 키와 요청 해시 저장, 지갑 락 후 재확인 | 비관적 락만 사용, 별도 멱등성 테이블 | 응답 유실 후 순차 재요청까지 중복 충전 없이 최초 결과로 복원합니다. | 실패 결과와 처리 중 상태는 저장하지 않으며 필요해지면 별도 테이블로 확장합니다. |
 | 주문 원자성 | 주문, 항목, 포인트 차감, 이력, Outbox를 한 DB 트랜잭션으로 저장 | 단계별 별도 저장과 보상 처리 | 중간 실패 시 일부 데이터만 남는 상태를 DB 롤백으로 방지합니다. | 트랜잭션 범위가 넓어질 수 있어 네트워크 호출은 포함하지 않습니다. |
 | 주문 멱등성 | `orders`에 키와 요청 해시 저장, DB 유니크 제약 | 별도 멱등성 테이블, 애플리케이션 선조회만 사용 | 주문과 멱등 결과가 같은 트랜잭션 생명주기를 가져 구조가 단순하며 유니크 제약이 동시 요청의 최종 방어선이 됩니다. | 처리 중 상태와 실패 응답을 별도로 저장하기 어렵습니다. 현재는 선행 트랜잭션 완료까지 대기하고 커밋 결과만 재사용합니다. |
 | 요청 동일성 판단 | 메뉴 ID 정렬 후 canonical payload의 SHA-256 저장 | 원본 JSON 문자열 비교 | JSON 필드나 메뉴 순서가 달라도 의미가 같은 요청을 동일하게 판단합니다. | canonical 규칙이 바뀌면 호환성 문제가 생기므로 규칙을 테스트로 고정합니다. |
@@ -551,6 +625,7 @@ FOR UPDATE SKIP LOCKED;
 | 포인트 총잔액 한도 초과 | 409 | `POINT_LIMIT_EXCEEDED` |
 | 포인트 부족 | 409 | `INSUFFICIENT_POINTS` |
 | 같은 멱등 키의 다른 요청 | 409 | `IDEMPOTENCY_KEY_REUSED` |
+| DB 락 또는 데드락 재시도 소진 | 503 | `CONCURRENT_REQUEST_TIMEOUT` |
 
 외부 플랫폼 전송 실패는 완료된 주문의 HTTP 응답이나 DB 상태를 롤백하지 않습니다.
 
