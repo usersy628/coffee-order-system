@@ -1,6 +1,6 @@
 # S11 인기 메뉴 부하 기준선
 
-상태: `LIVE_K6_NOT_RUN` — Testcontainers 실행계획 profile은 build output에서 검증하지만, 이 문서는 live k6 기준선의 실행 절차와 결과 기록 양식이다. 아직 p95·오류율·RPS·환경별 live 실행계획 값을 주장하지 않는다.
+상태: `LIVE_K6_FAILED_BASELINE` — 2026-07-14T23:04:26Z부터 23:10:08Z까지 분리한 `local,perf` 환경에서 live k6 기준선을 실행했다. fixture·DB 관찰 수집은 완료됐지만 p95·오류율·dropped iterations 기준을 모두 넘었으므로, 이 결과는 성능 통과가 아니라 후속 개선 전의 재현 가능한 실패 기준선이다.
 
 ## 범위와 판정 기준
 
@@ -95,19 +95,19 @@ runner 출력은 `build/performance/s11/<UTC timestamp>/`에만 쓴다.
 
 ## 실행 결과 기록
 
-아래 표는 실제 run 뒤에만 채운다. 다른 CPU·Docker 자원 제한·데이터 크기·동시 실행 프로세스의 결과는 숫자만으로 직접 비교하지 않는다.
+아래는 실제 run 결과다. 다른 CPU·Docker 자원 제한·데이터 크기·동시 실행 프로세스의 결과는 숫자만으로 직접 비교하지 않는다.
 
 | 항목 | 실제 값 |
 | --- | --- |
-| commit / 측정 UTC 시각 / 작업 트리 상태 | `NOT_RUN` |
-| OS / CPU 모델 / 물리·논리 코어 / RAM | `NOT_RUN` |
-| Docker Engine / Docker CPU·메모리 할당 / k6 image digest | `NOT_RUN` |
-| Java·JVM 옵션 / MySQL 버전 / 앱·DB·k6 배치 | `NOT_RUN` |
-| active profiles / 앱 instance 수 / app·DB port / network path | `NOT_RUN` |
-| 데이터셋 (orders / items / menus / 기간) | `NOT_RUN` |
-| scenario (30 RPS / 5분) | `NOT_RUN` |
-| p50(`med`) / p95 / p99 / `http_req_failed` / actual RPS / dropped iterations | `NOT_RUN` |
-| Hikari 시작·5초 sample 최대·종료 값 / MySQL connection·lock·deadlock | `NOT_RUN` |
-| Outbox PENDING count / oldest age | `NOT_RUN` — GET-only이면 `N/A` |
-| `EXPLAIN ANALYZE` report path / 관찰한 접근 경로 | `NOT_RUN` |
-| 결론 | `NOT_RUN` — 측정 근거 전에는 인덱스·Redis·replica를 추가하지 않는다. |
+| commit / 측정 UTC 시각 / 작업 트리 상태 | `8e69ec2c2e0f7531b3abb4b3786497edb79f3c35` / `2026-07-14T23:04:26Z`~`23:10:08Z` / clean |
+| OS / CPU 모델 / 물리·논리 코어 / RAM | Windows 11 Home `10.0.26200` / AMD Ryzen 7 7800X3D 8-Core Processor / 8·16 / 31.71 GiB |
+| Docker Engine / Docker CPU·메모리 할당 / k6 image digest | 29.4.3 / 16 CPU·15.48 GiB / `grafana/k6@sha256:1f40432b1cbe7234e977f96c362c9bc550a2d2b583d014dd8669fe40d3e9e755` |
+| Java·JVM 옵션 / MySQL 버전 / 앱·DB·k6 배치 | Java 17.0.12 LTS (이 run에서는 JVM argument를 별도 수집하지 않음) / MySQL 8.4.10 / Windows 단일 앱, Docker Compose MySQL, Docker k6 |
+| active profiles / 앱 instance 수 / app·DB port / network path | `local,perf` / 1 / `18081`·`3308` / `host.docker.internal:18081` |
+| 데이터셋 (orders / items / menus / 기간) | 100,000 / 300,000 / 100 / 30일, `2026-07-14T23:04:37Z` 검증 |
+| scenario (30 RPS / 5분) | constant-arrival-rate 30 RPS, 5분, 10~60 VU; 실제 최대 60 VU |
+| p50(`med`) / p95 / p99 / `http_req_failed` / actual RPS / dropped iterations | 2,045.95 ms / 3,074.07 ms / 3,166.57 ms / 51.87% / 19.88 RPS / 2,569 |
+| Hikari 시작·5초 sample 최대·종료 값 / MySQL connection·lock·deadlock | 시작 `active=0,pending=0,max=10`; 65개 sample 최대 `active=10,pending=50,max=10`; 종료 `active=0,pending=0,max=10`; MySQL 전·후 `Threads_connected=11`, `Threads_running=2`, max-connection error·row lock wait·deadlock 모두 0 |
+| Outbox PENDING count / oldest age | 전·후 0 / `N/A (write path not exercised)` |
+| `EXPLAIN ANALYZE` report path / 관찰한 접근 경로 | `build/reports/performance/popular-menu-explain-analyze.txt` / `order_item` 전체 scan → `orders` primary-key lookup → `menu` primary-key lookup |
+| 결론 | **실패 기준선**. p95는 목표 500 ms의 약 6.15배이고 오류율·dropped iterations도 기준을 초과했다. 앱 로그는 Hikari의 `max=10` 포화와 최대 50개 대기, 약 2초 connection-acquire timeout을 기록했다. 이 PR에서는 인덱스·Redis·replica·pool tuning을 추가하지 않으며, 후속 성능 개선은 이 기준선과 비교하는 별도 범위로 결정한다. |
