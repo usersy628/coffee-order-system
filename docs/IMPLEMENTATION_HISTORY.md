@@ -10,7 +10,7 @@
 
 - 상태: `DONE`
 - issue: [#5](https://github.com/usersy628/coffee-order-system/issues/5)
-- PR: 생성 후 기록
+- PR: [#27](https://github.com/usersy628/coffee-order-system/pull/27)
 - merge commit: `병합 후 기록`
 - 완료일: 2026-07-15
 - 완료 커밋: `8fb88ff`, `40339ab`, `fad8563`

@@ -8,7 +8,7 @@
 - `S7-01` 포인트 충전 API: `DONE`, issue #4 `CLOSED`, PR #24 `MERGED`
 - PR #24의 손상된 한글 본문을 UTF-8 `--body-file`로 복구했고 GitHub 원본에서 한글 제목과 예상하지 않은 리터럴 `?`가 없음을 확인함
 - `DOC-01` 구현 계획과 완료 이력 분리: `DONE`, issue #25 `CLOSED`, PR #26 `MERGED`, merge commit `14d8637`
-- `S8-01` 주문·포인트 결제·멱등성: 로컬 구현·전체 검증 `DONE`, issue #5 `OPEN`, 브랜치 `feature/issue-5-order-payment-idempotency`, PR 생성 준비
+- `S8-01` 주문·포인트 결제·멱등성: 구현·로컬 검증 `DONE`, issue #5 `OPEN`, PR #27 `OPEN`
 
 ## 문서 기준
 
@@ -26,4 +26,4 @@
 
 ## 다음 행동
 
-S8 완료 상세를 UTF-8 PR 본문 파일에 복사해 `dev` 대상 PR을 만들고 GitHub 원본과 필수 CI를 확인한다.
+PR #27의 필수 CI 결과를 확인하고 별도 검토자의 리뷰를 기다린다.
