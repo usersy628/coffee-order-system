@@ -10,7 +10,7 @@
 
 - 상태: `DONE`
 - issue: [#7](https://github.com/usersy628/coffee-order-system/issues/7) `OPEN`
-- PR: 생성 후 기록
+- PR: [#29](https://github.com/usersy628/coffee-order-system/pull/29) `OPEN`
 - merge commit: 병합 후 기록
 - 완료일: 2026-07-15
 - 구현 커밋: `5724012` (`feat: add popular menu top three query (#7)`)
@@ -49,7 +49,9 @@
   - `GET /api/menus/popular`가 `200 OK`로 `from`, `to`, 최대 3개 `items[{rank, menuId, menuName, totalQuantity}]`를 반환하고 빈 결과는 빈 배열이다.
   - 실제 MySQL에서 `[T - 168시간, T)` 시작 포함·종료 제외, 수량 합계, 동률 `menuId` 정렬, 상위 3개 제한, 현재 메뉴명과 `DECIMAL` 변환을 통과했다.
   - 고정 `Clock`의 나노초가 마이크로초로 절삭되고, UTC 조회 경계와 `Asia/Seoul` API 경계가 같으며 `Clock.instant()`를 한 번만 호출함을 통과했다.
-  - 대상 통합 테스트, daemon 없이 강제 재실행한 전체 테스트 96개(실패·오류·skip 0), `bootJar`, `git diff --check`를 통과했다.
+- 대상 통합 테스트, daemon 없이 강제 재실행한 전체 테스트 96개(실패·오류·skip 0), `bootJar`, `git diff --check`를 통과했다.
+- PR #29의 GitHub Actions `Build and test` CI도 성공했다.
+- 별도 검토에서 `[T - 168시간, T)` 경계·Clock 1회 호출·UTC/KST 변환·수량 집계·동률 정렬·현재 메뉴명·빈 결과 계약을 확인했고, 병합을 막을 구현 결함은 발견되지 않았다.
 - 계획 대비 변경 사항:
   - 요구사항·API 계약·스키마·인덱스와 캐시 정책의 변경은 없다.
   - 전체 테스트 증거가 선택 실행 결과를 재사용하지 않도록 `--no-daemon --rerun-tasks`로 96개 전체 테스트를 다시 실행해 확인했다.
