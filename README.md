@@ -68,10 +68,11 @@
 - Transactional Outbox 패턴을 사용합니다.
 - 주문 트랜잭션에서는 외부 API를 호출하지 않고 Outbox 이벤트까지만 저장합니다.
 - 별도 게시자가 커밋된 이벤트를 외부 플랫폼으로 전송합니다.
-- 전달 의미는 at-least-once이며, 소비자는 `eventId`로 중복 이벤트를 제거해야 합니다.
+- 전송 성공 전까지 같은 이벤트가 중복 전달될 수 있는 at-least-once 시도 모델을 사용하며, 소비자는 `eventId`로 중복 이벤트를 제거해야 합니다.
+- 최대 시도 후 `FAILED`가 된 이벤트는 운영자 redrive가 필요하므로 외부 플랫폼이 영구 장애인 상황까지 자동으로 최종 전달을 보장한다고 표현하지 않습니다.
 - 2xx는 이벤트 전송 성공으로 처리하지만 주문 성공 조건에는 영향을 주지 않습니다.
-- 4xx는 재시도하지 않는 데이터 오류로 보고 `FAILED`로 전환합니다.
-- 네트워크 오류와 5xx는 지수 백오프로 최초 실패 후 최대 5회 재시도합니다. 최초 전송을 포함한 최대 시도 횟수는 6회이며, 모두 실패하면 `FAILED`로 전환합니다.
+- 네트워크 오류, timeout, 재시도 가능한 4xx와 5xx는 지수 백오프와 jitter로 최초 실패 후 최대 5회 재시도합니다. 최초 전송을 포함한 최대 시도 횟수는 6회입니다.
+- 4xx는 상태군만으로 일괄 처리하지 않고 외부 플랫폼 계약과 오류 코드를 기준으로 재시도, 성공 또는 영구 실패를 구분합니다.
 
 ### 인기 메뉴
 
@@ -413,13 +414,18 @@ erDiagram
         CHAR event_id UK
         BIGINT order_id FK
         VARCHAR event_type
+        INT schema_version
         JSON payload
         VARCHAR status
         INT attempt_count
+        INT redrive_count
         DATETIME next_attempt_at
         VARCHAR locked_by
         DATETIME locked_at
+        CHAR claim_token
+        INT last_http_status
         DATETIME published_at
+        DATETIME failed_at
         TEXT last_error
         DATETIME created_at
     }
@@ -534,20 +540,58 @@ erDiagram
 | `event_id` | `CHAR(36)` | UNIQUE, NOT NULL | 소비자 중복 제거용 UUID |
 | `order_id` | `BIGINT` | FK, NOT NULL | 주문 식별자 |
 | `event_type` | `VARCHAR(50)` | NOT NULL | `ORDER_COMPLETED` |
-| `payload` | `JSON` | NOT NULL | 외부 전송 데이터 |
+| `schema_version` | `INT` | NOT NULL, DEFAULT 1 | 외부 이벤트 스키마 버전 |
+| `payload` | `JSON` | NOT NULL | 재시도마다 동일하게 보내는 이벤트 전문 |
 | `status` | `VARCHAR(20)` | NOT NULL | `PENDING`, `PROCESSING`, `PUBLISHED`, `FAILED` |
-| `attempt_count` | `INT` | NOT NULL, DEFAULT 0 | 실제 전송 시도 횟수 |
+| `attempt_count` | `INT` | NOT NULL, DEFAULT 0 | 선점되어 전송 단계에 진입한 횟수 |
+| `redrive_count` | `INT` | NOT NULL, DEFAULT 0 | 운영자 재처리 횟수 |
 | `next_attempt_at` | `DATETIME(6)` | NOT NULL | 다음 재시도 가능 시각 |
-| `locked_by` | `VARCHAR(100)` | NULL 허용 | 선점한 게시자 식별자 |
+| `locked_by` | `VARCHAR(100)` | NULL 허용 | 선점한 게시자 인스턴스 식별자 |
 | `locked_at` | `DATETIME(6)` | NULL 허용 | 선점 시각 |
+| `claim_token` | `CHAR(36)` | NULL 허용 | 선점마다 새로 발급하는 fencing UUID |
+| `last_http_status` | `SMALLINT UNSIGNED` | NULL 허용 | 마지막 외부 HTTP 상태 |
 | `published_at` | `DATETIME(6)` | NULL 허용 | 전송 완료 시각 |
+| `failed_at` | `DATETIME(6)` | NULL 허용 | 최종 실패 전환 시각 |
 | `last_error` | `TEXT` | NULL 허용 | 마지막 실패 원인 |
 | `created_at` | `DATETIME(6)` | NOT NULL | 이벤트 생성 시각 |
 
 - `UNIQUE (event_id)`
 - `UNIQUE (order_id, event_type)`
+- `CHECK (status IN ('PENDING', 'PROCESSING', 'PUBLISHED', 'FAILED'))`
 - `CHECK (attempt_count BETWEEN 0 AND 6)`
+- `CHECK (redrive_count >= 0)`
+- `CHECK (schema_version >= 1)`
+- `CHECK (last_http_status IS NULL OR last_http_status BETWEEN 100 AND 599)`
+- `PROCESSING`이면 `locked_by`, `locked_at`, `claim_token`이 모두 존재해야 합니다.
+- `PUBLISHED`이면 `published_at`, `FAILED`이면 `failed_at`이 존재해야 합니다.
 - `FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE RESTRICT`
+
+`UNIQUE (order_id, event_type)`은 현재 주문마다 `ORDER_COMPLETED` 이벤트가 하나뿐이라는 정책에 맞습니다. 향후 같은 주문에서 동일 타입의 이벤트를 여러 번 발행해야 한다면 aggregate version을 추가하고 이 제약을 확장합니다.
+
+이벤트 payload는 생성 후 변경하지 않으며 모든 재시도에서 같은 `eventId`와 내용을 전송합니다.
+
+```json
+{
+  "eventId": "779f66da-29dd-4d70-88d6-51b4bc4a04f1",
+  "eventType": "ORDER_COMPLETED",
+  "schemaVersion": 1,
+  "occurredAt": "2026-07-14T06:35:00Z",
+  "orderId": 101,
+  "data": {
+    "userId": 1,
+    "totalAmount": 14000,
+    "items": [
+      {
+        "menuId": 1,
+        "menuName": "아메리카노",
+        "unitPrice": 4500,
+        "quantity": 2,
+        "lineAmount": 9000
+      }
+    ]
+  }
+}
+```
 
 게시자는 짧은 DB 트랜잭션에서 다음 조건의 이벤트를 `FOR UPDATE SKIP LOCKED`로 조회하여 다중 인스턴스 간 중복 선점을 방지합니다.
 
@@ -561,9 +605,69 @@ LIMIT :batch_size
 FOR UPDATE SKIP LOCKED;
 ```
 
-선점한 행을 `PROCESSING`으로 변경하고 `locked_by`, `locked_at`을 기록한 뒤 트랜잭션을 커밋합니다. 외부 API는 커밋 후 호출합니다. 게시자가 중단되어 `PROCESSING` 상태가 오래 유지되면 lease timeout을 기준으로 다시 `PENDING`으로 회수합니다.
+선점 트랜잭션에서 `PROCESSING`으로 변경하고 `attempt_count`를 1 증가시키며 `locked_by`, `locked_at`과 매번 새로운 `claim_token`을 기록합니다. 이 시점의 attempt는 네트워크 호출 완료가 아니라 전송 단계에 진입한 횟수를 의미합니다. 트랜잭션을 커밋한 후에만 외부 API를 호출합니다.
 
-외부 플랫폼이 이벤트를 수신한 직후 게시자가 종료되면 같은 이벤트가 다시 전송될 수 있습니다. 따라서 게시자는 매번 같은 `event_id`를 사용하고, Mock API 테스트에서도 소비자의 중복 제거를 검증합니다.
+외부 플랫폼이 이벤트를 수신한 직후 게시자가 종료되면 같은 이벤트가 다시 전송될 수 있습니다. 따라서 게시자는 매번 같은 `event_id`를 사용하고, 외부 API가 멱등 헤더를 지원하면 같은 값을 `Idempotency-Key`로 전달합니다. Mock API 테스트에서도 소비자의 중복 제거를 검증합니다.
+
+### Outbox 상태 전이와 fencing
+
+```mermaid
+stateDiagram-v2
+    [*] --> PENDING: 주문과 함께 저장
+    PENDING --> PROCESSING: claim + attempt_count 증가
+    PROCESSING --> PUBLISHED: 2xx 또는 확인된 중복 성공
+    PROCESSING --> PENDING: 재시도 가능 실패
+    PROCESSING --> PENDING: lease 만료 회수
+    PROCESSING --> FAILED: 영구 실패 또는 6회 소진
+    FAILED --> PENDING: 운영자 redrive
+    PUBLISHED --> [*]: 보관 기간 후 삭제
+```
+
+lease timeout은 기본 30초이며 connect timeout 1초와 read timeout 3초보다 충분히 길게 둡니다. 만료된 `PROCESSING` 이벤트는 짧은 트랜잭션에서 `PENDING`으로 회수하고 기존 claim 정보를 지웁니다. 회수된 이벤트를 다른 게시자가 선점하면 반드시 새로운 `claim_token`을 발급합니다.
+
+늦게 끝난 이전 게시자가 새 게시자의 결과를 덮어쓰지 못하도록 모든 완료·실패 갱신은 자신이 소유한 claim에만 허용합니다.
+
+```sql
+UPDATE order_event_outbox
+SET status = 'PUBLISHED',
+    published_at = UTC_TIMESTAMP(6),
+    claim_token = NULL,
+    locked_by = NULL,
+    locked_at = NULL
+WHERE id = :id
+  AND status = 'PROCESSING'
+  AND claim_token = :claim_token;
+```
+
+영향받은 행이 0개면 lease가 만료되어 소유권을 잃은 것이므로 이전 게시자는 상태를 더 변경하지 않습니다.
+
+### 외부 응답 분류와 재시도
+
+| 결과 | 처리 |
+| --- | --- |
+| `2xx` | `PUBLISHED` |
+| 외부 계약이 명시한 `EVENT_ALREADY_PROCESSED` | 동일 `eventId`가 이미 처리된 것이므로 성공으로 간주 |
+| 네트워크 오류, connect/read timeout | 재시도 |
+| `408`, `425`, `429` | 재시도, `429`는 `Retry-After` 우선 적용 |
+| `5xx` | 재시도 |
+| `401`, `403` | 인증·설정 장애로 즉시 `FAILED`, 경보 후 설정 복구와 redrive |
+| `400`, `404`, `422` | payload 또는 계약 오류로 `FAILED` |
+| `409` 및 그 밖의 `4xx` | 외부 오류 코드를 확인하여 중복 성공, 재시도 또는 영구 실패로 분류 |
+
+- 최초 시도는 즉시 수행하고 실패 후 1초, 2초, 4초, 8초, 16초 기준 지수 백오프에 ±20% jitter를 적용합니다. 최대 지연은 기본 30초이며 모두 설정으로 분리합니다.
+- 6번째 시도까지 실패하면 `FAILED`, `failed_at`, `last_http_status`, `last_error`를 기록합니다.
+- 게시 주기는 기본 1초, 배치 크기는 100, 인스턴스별 동시 외부 호출 수는 10으로 시작하고 외부 플랫폼 rate limit과 부하 테스트 결과에 따라 조정합니다.
+- 정상 종료 시 새 선점을 중단하고 진행 중 호출을 최대 10초 기다립니다. 끝나지 않은 claim은 상태를 억지로 덮어쓰지 않고 lease 회수에 맡깁니다.
+
+### FAILED redrive, 보관과 관측
+
+redrive는 공개 API가 아닌 운영 명령으로 제공합니다. 원인을 해결한 뒤 `FAILED` 이벤트를 `PENDING`으로 바꾸고 `attempt_count`를 0으로 초기화하며 `redrive_count`를 증가시킵니다. `next_attempt_at`은 현재 UTC 시각으로 설정하고 claim과 `failed_at`을 지우되 직전 `last_error`는 감사 목적으로 다음 결과가 기록될 때까지 유지합니다.
+
+- `PUBLISHED` 이벤트는 기본 7일 보관 후 한 번에 최대 1,000건씩 삭제합니다.
+- `FAILED` 이벤트는 성공적으로 redrive되거나 운영자가 확인하기 전에는 자동 삭제하지 않습니다.
+- 가장 오래된 `PENDING` 나이, 상태별 건수, 성공률, 재시도 횟수, lease 회수 횟수, redrive 횟수와 외부 응답 지연을 메트릭으로 수집합니다.
+- `FAILED` 발생, 가장 오래된 `PENDING` 나이 임계치 초과와 연속 인증 오류에 경보를 설정합니다.
+- Mock 소비자는 `eventId` 유니크 기록과 수집 데이터 반영을 한 트랜잭션으로 처리합니다. 같은 이벤트를 다시 받으면 데이터를 중복 반영하지 않고 이미 처리된 결과를 반환합니다.
 
 ## 인덱스
 
@@ -603,8 +707,8 @@ FOR UPDATE SKIP LOCKED;
 | 주문 멱등성 | `orders`에 키와 요청 해시 저장, DB 유니크 제약 | 별도 멱등성 테이블, 애플리케이션 선조회만 사용 | 주문과 멱등 결과가 같은 트랜잭션 생명주기를 가져 구조가 단순하며 유니크 제약이 동시 요청의 최종 방어선이 됩니다. | 처리 중 상태와 실패 응답을 별도로 저장하기 어렵습니다. 현재는 선행 트랜잭션 완료까지 대기하고 커밋 결과만 재사용합니다. |
 | 요청 동일성 판단 | 메뉴 ID 정렬 후 canonical payload의 SHA-256 저장 | 원본 JSON 문자열 비교 | JSON 필드나 메뉴 순서가 달라도 의미가 같은 요청을 동일하게 판단합니다. | canonical 규칙이 바뀌면 호환성 문제가 생기므로 규칙을 테스트로 고정합니다. |
 | 외부 데이터 전송 | Transactional Outbox | 주문 트랜잭션 안에서 직접 호출, 커밋 후 메모리 작업 큐 | 주문과 이벤트 저장의 원자성을 지키면서 외부 장애를 주문 성공과 분리합니다. | 게시자, 재시도와 정체 이벤트 모니터링이 추가로 필요합니다. |
-| 이벤트 전달 보장 | at-least-once와 `eventId` 중복 제거 | exactly-once 전달 | 네트워크 단절 시 전송 성공 여부를 완전히 알 수 없으므로 재전송을 허용하는 방식이 현실적입니다. | 소비자가 같은 `eventId`를 멱등 처리해야 하며 Mock API 테스트로 검증합니다. |
-| Outbox 다중 인스턴스 선점 | `FOR UPDATE SKIP LOCKED`와 짧은 선점 트랜잭션 | 분산 락, 인스턴스별 고정 파티션 | 별도 인프라 없이 여러 게시자가 서로 잠긴 행을 건너뛰며 병렬 처리할 수 있습니다. | DB 지원 여부에 의존하며 오래된 `PROCESSING` 이벤트를 lease timeout으로 회수해야 합니다. |
+| 이벤트 전달 보장 | 중복 가능한 at-least-once 시도 모델과 `eventId` 중복 제거 | exactly-once 전달 | 네트워크 단절 시 전송 성공 여부를 완전히 알 수 없으므로 같은 이벤트 재전송을 허용하는 방식이 현실적입니다. | 소비자 멱등 처리가 필수이며 최대 시도 후에는 운영자 redrive가 있어야 전달을 재개할 수 있습니다. |
+| Outbox 다중 인스턴스 선점 | `FOR UPDATE SKIP LOCKED`, 짧은 선점 트랜잭션, `claim_token` fencing | 분산 락, 인스턴스별 고정 파티션 | 별도 인프라 없이 여러 게시자가 잠긴 행을 건너뛰며 병렬 처리하고 늦게 끝난 작업자의 상태 덮어쓰기를 막습니다. | DB 지원 여부에 의존하며 lease 회수, timeout과 claim 소유권 조건을 함께 관리해야 합니다. |
 | 금액 타입 | Java `long`, MySQL `BIGINT` | `int`, 소수 타입 | 정수 포인트 정책에 맞고 합계 계산의 오버플로 여유와 도메인 타입 일관성을 확보합니다. | 현재 한도보다 넓은 타입이지만 DB `CHECK`와 애플리케이션 검증으로 정책 범위를 제한합니다. |
 | 주문 가격 보존 | `order_item`에 메뉴명과 가격 스냅샷 저장 | 조회 시 현재 `menu`만 조인 | 메뉴 정보가 바뀌어도 주문 당시 금액과 표시 내용을 재현할 수 있습니다. | 데이터가 중복되지만 주문 이력의 불변성과 추적 가능성을 우선합니다. |
 | 시간 저장과 표현 | 내부·DB UTC, API `Asia/Seoul` | DB에 한국시간 직접 저장 | 동일한 순간을 명확하게 비교하면서 한국 사용자에게 자연스러운 시간을 제공합니다. | API 경계 변환이 필요하므로 공통 직렬화 설정과 시간 경계 테스트를 둡니다. |
