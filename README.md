@@ -2,7 +2,7 @@
 
 다중 서버 환경에서 동시성, 데이터 일관성, 장애 복구를 고려하는 커피 주문 시스템 과제입니다.
 
-요구사항 분석, ERD, API 명세, 동시성·트랜잭션·Outbox 상세 전략과 기술 스택 승인을 완료했고, Spring Boot 기본 구조와 MySQL 8.4.10 통합 테스트 기반, 메뉴 목록, 포인트 충전 및 주문·결제와 트랜잭션 내 `PENDING` Outbox 저장까지 구현했습니다. 다음 작업은 Outbox 게시자와 Mock 데이터 플랫폼 구현입니다.
+요구사항 분석, ERD, API 명세, 동시성·트랜잭션·Outbox 상세 전략과 기술 스택 승인을 완료했고, Spring Boot 기본 구조와 MySQL 8.4.10 통합 테스트 기반, 메뉴 목록, 포인트 충전, 주문·결제, 트랜잭션 내 `PENDING` Outbox 저장, Outbox 게시자와 Mock 데이터 플랫폼까지 구현했습니다. 다음 작업은 인기 메뉴 TOP 3 조회입니다.
 
 ## 설계 목표와 의도
 
@@ -1036,5 +1036,5 @@ RPS 자체만으로 스케일 아웃하지 않습니다. DB가 병목인데 애�
 
 구현 작업의 상태, 선행 관계, 대상 파일과 검증 기준은 [`docs/IMPLEMENTATION_PLAN.md`](docs/IMPLEMENTATION_PLAN.md)에서 관리합니다. 이 문서는 구현 순서만 관리하며, 요구사항·ERD·API 계약과 기술적 결정의 단일 기준은 계속 `README.md`입니다. Spring Boot 기본 구조, MySQL Testcontainers 기반, 메뉴 목록, 포인트 충전과 주문·결제 및 트랜잭션 내 Outbox 저장은 완료했으며, 아래 목록은 남은 고수준 마일스톤입니다.
 
-1. Outbox 게시자와 Mock 데이터 플랫폼 구현 및 테스트
-2. 인기 메뉴 집계, MySQL Testcontainers 회귀·부하 테스트와 제출 문서 완성
+1. 인기 메뉴 TOP 3 집계
+2. 기능 간 MySQL Testcontainers 회귀·부하 테스트와 제출 문서 완성
