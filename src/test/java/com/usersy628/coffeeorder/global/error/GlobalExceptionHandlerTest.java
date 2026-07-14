@@ -11,6 +11,7 @@ import java.util.Map;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.usersy628.coffeeorder.global.trace.TraceIdFilter;
+import jakarta.validation.constraints.Min;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.slf4j.MDC;
@@ -21,8 +22,10 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -94,6 +97,56 @@ class GlobalExceptionHandlerTest {
 		assertTraceIdMatchesHeader(result);
 	}
 
+	@Test
+	void mapsANonNumericUserIdToInvalidUserId() throws Exception {
+		MvcResult result = mockMvc.perform(get("/test/users/not-a-number"))
+			.andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.code").value("INVALID_USER_ID"))
+			.andExpect(jsonPath("$.details").isEmpty())
+			.andReturn();
+
+		assertTraceIdMatchesHeader(result);
+	}
+
+	@Test
+	void mapsAUserIdBelowOneToInvalidUserId() throws Exception {
+		MvcResult result = mockMvc.perform(get("/test/users/0"))
+			.andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.code").value("INVALID_USER_ID"))
+			.andExpect(jsonPath("$.details").isEmpty())
+			.andReturn();
+
+		assertTraceIdMatchesHeader(result);
+	}
+
+	@Test
+	void mapsAMissingIdempotencyKeyToTheRequiredHeaderContract() throws Exception {
+		MvcResult result = mockMvc.perform(post("/test/idempotent-json")
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("{\"amount\":100}"))
+			.andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.code").value("IDEMPOTENCY_KEY_REQUIRED"))
+			.andExpect(jsonPath("$.details").isEmpty())
+			.andReturn();
+
+		assertTraceIdMatchesHeader(result);
+	}
+
+	@Test
+	void mapsAnUnsupportedContentTypeWithoutLeakingFrameworkDetails() throws Exception {
+		MvcResult result = mockMvc.perform(post("/test/idempotent-json")
+				.header("Idempotency-Key", "test-key")
+				.contentType(MediaType.TEXT_PLAIN)
+				.content("amount=100"))
+			.andExpect(status().isUnsupportedMediaType())
+			.andExpect(jsonPath("$.code").value("UNSUPPORTED_MEDIA_TYPE"))
+			.andExpect(jsonPath("$.details").isEmpty())
+			.andReturn();
+
+		assertTraceIdMatchesHeader(result);
+		assertThat(result.getResponse().getContentAsString()).doesNotContain("text/plain");
+	}
+
 	private void assertTraceIdMatchesHeader(MvcResult result) throws Exception {
 		String headerTraceId = result.getResponse().getHeader(TraceIdFilter.TRACE_ID_HEADER);
 		JsonNode responseBody = objectMapper.readTree(result.getResponse().getContentAsByteArray());
@@ -118,6 +171,19 @@ class GlobalExceptionHandlerTest {
 
 		@PostMapping("/json")
 		Map<String, Long> json(@RequestBody TestRequest request) {
+			return Map.of("amount", request.amount());
+		}
+
+		@GetMapping("/users/{userId}")
+		Map<String, Long> user(@PathVariable @Min(1) long userId) {
+			return Map.of("userId", userId);
+		}
+
+		@PostMapping(value = "/idempotent-json", consumes = MediaType.APPLICATION_JSON_VALUE)
+		Map<String, Long> idempotentJson(
+			@RequestHeader("Idempotency-Key") String idempotencyKey,
+			@RequestBody TestRequest request
+		) {
 			return Map.of("amount", request.amount());
 		}
 	}
