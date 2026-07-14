@@ -32,6 +32,12 @@ management:
       show-details: never
 
 coffee-order:
+  order:
+    create:
+      retry:
+        max-attempts: 3
+        initial-backoff: 50ms
+        jitter-factor: 0.2
   point:
     charge:
       retry:

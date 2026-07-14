@@ -6,12 +6,110 @@
 
 ## 완료 작업 상세
 
+### [`S8-01`](https://github.com/usersy628/coffee-order-system/issues/5) 여러 메뉴 주문·포인트 결제·멱등성 구현
+
+- 상태: `DONE`
+- issue: [#5](https://github.com/usersy628/coffee-order-system/issues/5)
+- PR: [#27](https://github.com/usersy628/coffee-order-system/pull/27)
+- merge commit: `병합 후 기록`
+- 완료일: 2026-07-15
+- 완료 커밋: `8fb88ff`, `40339ab`, `fad8563`
+- 사용자 승인: 2026-07-15
+- 목적: `POST /api/users/{userId}/orders`에서 여러 메뉴 주문, 서버 가격 계산, 포인트 차감, 멱등 결과 재현과 `PENDING` Outbox 저장을 하나의 MySQL 트랜잭션으로 구현한다.
+- 요구사항 근거:
+  - `README.md`의 `핵심 정책 > 주문`, `주문 멱등성`, `Transactional Outbox`
+  - `README.md`의 `API 명세 > 여러 메뉴 주문 및 포인트 결제`
+  - `README.md`의 `동시성 및 트랜잭션 상세 전략 > 주문 및 결제 흐름`, `락 순서, 타임아웃과 재시도`
+  - `README.md`의 `예외 처리와 추적`, `테이블 설계`, `시간 저장 기준`, `테스트 전략`, `주요 오류 정책`
+- 선행 작업: `S6-01`, `S7-01`, `DOC-01` 완료와 PR #26의 `dev` 병합
+- 작업 브랜치: 최신 `dev`에서 `feature/issue-5-order-payment-idempotency` 생성
+- 대상 파일:
+  - `src/main/java/com/usersy628/coffeeorder/order/api/OrderController.java`
+  - `src/main/java/com/usersy628/coffeeorder/order/api/OrderCreateRequest.java`
+  - `src/main/java/com/usersy628/coffeeorder/order/api/OrderCreateResponse.java`
+  - `src/main/java/com/usersy628/coffeeorder/order/application/OrderCommand.java`
+  - `src/main/java/com/usersy628/coffeeorder/order/application/OrderResult.java`
+  - `src/main/java/com/usersy628/coffeeorder/order/application/OrderService.java`
+  - `src/main/java/com/usersy628/coffeeorder/order/application/OrderTransactionExecutor.java`
+  - `src/main/java/com/usersy628/coffeeorder/order/application/OrderRequestHasher.java`
+  - `src/main/java/com/usersy628/coffeeorder/order/application/OrderRetryProperties.java`
+  - `src/main/java/com/usersy628/coffeeorder/order/application/OrderRetryFailureException.java`
+  - `src/main/java/com/usersy628/coffeeorder/global/error/ErrorCode.java`
+  - `src/main/java/com/usersy628/coffeeorder/global/error/GlobalExceptionHandler.java`
+  - `src/main/resources/application.yml`
+  - `src/test/java/com/usersy628/coffeeorder/order/api/OrderApiIntegrationTest.java`
+  - `src/test/java/com/usersy628/coffeeorder/order/application/OrderServiceTest.java`
+  - `src/test/java/com/usersy628/coffeeorder/order/infrastructure/OrderConcurrencyIntegrationTest.java`
+  - `src/test/java/com/usersy628/coffeeorder/global/error/GlobalExceptionHandlerTest.java`
+  - `README.md`
+  - `docs/IMPLEMENTATION_PLAN.md`
+  - `docs/IMPLEMENTATION_HISTORY.md`
+  - `docs/PROJECT_STATUS.md`
+- 먼저 수행할 테스트 또는 검증:
+  1. 실제 MySQL 통합 테스트에서 유효한 주문 요청이 endpoint 부재로 `404 ENDPOINT_NOT_FOUND`가 되는 RED를 확인한다.
+  2. null item, 필드 누락, 0·음수·`int` 초과, 빈 항목과 중복 메뉴가 `400 INVALID_ORDER_REQUEST`가 되는 계약 테스트를 먼저 작성한다.
+  3. 입력 순서가 다른 동일 요청의 canonical hash·저장·응답·replay·Outbox items 정렬 테스트를 먼저 작성한다.
+  4. 주문·항목·지갑·`USE` 이력·Outbox 중간 실패의 전체 롤백과 동일 사용자 동시 요청 테스트를 작성한다.
+- RED 확인:
+  - 2026-07-15 실제 MySQL 통합 환경에서 `OrderApiIntegrationTest.createsAnOrderWithMultipleMenuItems`가 `201`을 기대했지만 endpoint 부재로 `404 ENDPOINT_NOT_FOUND`를 반환해 실패했다.
+- 구현 범위:
+  - 사용자·멱등 키·주문 항목 검증과 400·404·409·503 오류 계약
+  - 메뉴 DB 가격 계산, 판매 상태 검증과 `menuId` 오름차순 스냅샷 저장
+  - 지갑 선잠금, 포인트 차감, `USE` 이력과 주문 저장의 5초 트랜잭션
+  - 정렬 canonical payload SHA-256과 기존 결과 replay
+  - 명령당 단일 마이크로초 `Instant` 재사용
+  - 주문과 함께 `PENDING` Outbox 한 건 저장
+- 제외 범위:
+  - Outbox claim·lease·fencing·전송·retry·`PUBLISHED`·`FAILED`와 Mock consumer
+  - 메뉴 관리·재고·취소·환불, 외부 PG, 인증 principal 대조
+  - `position` 컬럼, 최대 수량과 최대 항목 수 제한
+- 완료 조건:
+  - 잘못된 주문 입력이 `INVALID_ORDER_REQUEST`로 일관되게 변환된다.
+  - 가격·판매 상태·잔액 검증과 주문 전체 저장이 실제 MySQL에서 원자적이다.
+  - 같은 키·같은 정규화 요청은 최초 응답을 재현하고 다른 요청은 409가 된다.
+  - 저장·응답·replay·Outbox items가 `menuId` 오름차순이며 시각이 같은 마이크로초 순간이다.
+  - 동시 주문에서도 한 번만 차감되고 음수 잔액이 발생하지 않는다.
+  - 전체 테스트, `bootJar`, `git diff --check`와 필수 CI가 성공한다.
+- 실제 검증 결과:
+  - 주문 endpoint 구현 전 실제 MySQL 통합 테스트에서 `404 ENDPOINT_NOT_FOUND` RED를 확인했다.
+  - null item, 필드 누락, 0·음수·`int` 초과, 빈 목록과 중복 메뉴 입력 8종이 모두 `400 INVALID_ORDER_REQUEST`인지 검증했다.
+  - 메뉴 순서가 다른 같은 요청은 최초 주문 응답을 재현하고 한 번만 차감하며, 같은 키의 다른 요청은 `409 IDEMPOTENCY_KEY_REUSED`인지 검증했다.
+  - 주문·항목·`USE` 이력·Outbox와 지갑 시각, Outbox `occurredAt` 및 API `paidAt`이 같은 마이크로초 순간인지 검증했다.
+  - 동일 멱등 키 100개 동시 요청은 주문·차감·Outbox가 한 건만 생성되고, 서로 다른 주문 100개는 잔액 유실 없이 모두 직렬화됨을 실제 MySQL에서 검증했다.
+  - 실제 MySQL 락 timeout의 전체 명령 3회 재시도와 소진 시 `503 CONCURRENT_REQUEST_TIMEOUT`, Outbox 저장 실패 시 주문·항목·차감·이력 전체 롤백을 검증했다.
+  - 리뷰 후 주문 흐름 문서를 실제 `지갑 락 → 기존 주문 current read → 메뉴 조회·금액 계산 → 저장` 순서에 맞췄다.
+  - 유효한 `BIGINT` 메뉴 가격과 수량의 곱셈이 `long`을 넘으면 500이 되던 경로를 재현하고, 곱셈 전 남은 잔액 비교로 `409 INSUFFICIENT_POINTS`를 반환하도록 수정했다.
+  - 리뷰 반영 후 전체 테스트 66개가 성공했고 실패·오류·skip은 0개이며 `bootJar`와 `git diff --check`가 성공했다.
+  - PR #27의 필수 `Build and test`가 성공했다.
+- 계획 대비 변경 사항:
+  - 이미 확정된 단일 schema 안에서 짧은 순차 SQL 트랜잭션과 락 순서를 명확히 유지하기 위해 예상했던 여러 JPA entity·repository 대신 `JdbcTemplate` 기반 `OrderTransactionExecutor`로 구현했다. 새 domain entity나 repository interface는 만들지 않았다.
+  - 같은 사용자 요청이 지갑 락으로 먼저 직렬화되므로 주문 전용 `OrderReplayReader` 없이 같은 transaction의 `FOR UPDATE` current read로 replay를 복원했다. 유니크 제약은 최종 방어선으로 유지했다.
+  - 100개 동시 replay 테스트에서 지갑 락 전에 메뉴 일반 조회를 수행하면 MySQL `REPEATABLE READ` snapshot 때문에 선행 주문의 `point_history`를 못 보는 결함을 발견했다. 지갑 락과 기존 주문 확인 뒤 메뉴를 조회하도록 순서를 변경해 재검증했다.
+  - 503 응답 변환 전 재시도 횟수와 원인 타입을 민감정보 없이 WARN으로 기록하도록 주문 전용 재시도 예외와 오류 계약 테스트를 추가했다.
+  - PR #27 리뷰에 따라 주문 금액 계산 전에 남은 잔액으로 지불 가능 여부를 판정해 항목 곱셈과 누적 합계의 `long` 오버플로를 함께 방지했다.
+  - Flyway schema와 seed, 로컬 실행 프로필·포트 설정은 변경하지 않았다.
+- 검증 명령:
+
+```powershell
+docker info
+.\gradlew.bat test --tests "com.usersy628.coffeeorder.order.api.OrderApiIntegrationTest"
+.\gradlew.bat test --tests "com.usersy628.coffeeorder.order.application.OrderServiceTest"
+.\gradlew.bat test --tests "com.usersy628.coffeeorder.order.infrastructure.OrderConcurrencyIntegrationTest"
+.\gradlew.bat test --tests "com.usersy628.coffeeorder.global.error.GlobalExceptionHandlerTest"
+.\gradlew.bat test --tests "com.usersy628.coffeeorder.order.*"
+.\gradlew.bat clean test
+.\gradlew.bat bootJar
+git diff --check
+git status --short
+gh pr checks
+```
+
 ### [`DOC-01`](https://github.com/usersy628/coffee-order-system/issues/25) 구현 계획과 완료 이력 분리
 
 - 상태: `DONE`
 - issue: [#25](https://github.com/usersy628/coffee-order-system/issues/25)
 - PR: [#26](https://github.com/usersy628/coffee-order-system/pull/26)
-- merge commit: 병합 후 기록
+- merge commit: `14d8637`
 - 완료일: 2026-07-15
 - 완료 커밋: `318e53f`
 - 목적: 완료된 작업 상세를 별도 History로 옮겨 활성 계획의 길이와 컨텍스트 비용을 줄이면서 계획과 실제 결과의 추적성을 유지한다.

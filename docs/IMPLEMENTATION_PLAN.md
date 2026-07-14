@@ -52,7 +52,7 @@
 | [`S6-01`](https://github.com/usersy628/coffee-order-system/issues/3) | `DONE` | `S5-03` | 메뉴 목록 조회 API와 테스트 | 메뉴 목록 계약·통합 테스트 성공 |
 | [`S6-02`](https://github.com/usersy628/coffee-order-system/issues/22) | `DONE` | `S6-01`, `S5-04` | 메뉴 UTC 시간 매핑과 README 구현 상태 정합성 보완 | MySQL `DATETIME(6)`·`Instant` 정밀도 테스트와 문서 정합성 검증 성공 |
 | [`S7-01`](https://github.com/usersy628/coffee-order-system/issues/4) | `DONE` | `S5-03` | 포인트 충전·이력·멱등성·동시성과 충전 요청 검증 오류 처리 | 실제 MySQL 단일·중복·경합 충전과 `INVALID_CHARGE_AMOUNT` 계약 테스트 성공 |
-| [`S8-01`](https://github.com/usersy628/coffee-order-system/issues/5) | `BACKLOG` | `S6-01`, `S7-01` | 여러 메뉴 주문·결제·멱등성, 트랜잭션 내 Outbox 저장과 주문 요청 검증 오류 처리 | 실제 MySQL 원자성·중복 요청·동시 주문과 `INVALID_ORDER_REQUEST` 계약 테스트 성공 |
+| [`S8-01`](https://github.com/usersy628/coffee-order-system/issues/5) | `DONE` | `S6-01`, `S7-01` | 여러 메뉴 주문·결제·멱등성, 트랜잭션 내 Outbox 저장과 주문 요청 검증 오류 처리 | 실제 MySQL 원자성·중복 요청·동시 주문과 `INVALID_ORDER_REQUEST` 계약 테스트 성공 |
 | [`S9-01`](https://github.com/usersy628/coffee-order-system/issues/6) | `BACKLOG` | `S8-01` | Outbox 게시자와 Mock 데이터 수집 플랫폼 | 2xx 성공, 4xx 즉시 실패, 네트워크·timeout·5xx 최대 5회 재시도, lease·fencing·중복 제거 테스트 성공 |
 | [`S10-01`](https://github.com/usersy628/coffee-order-system/issues/7) | `BACKLOG` | `S8-01` | 최근 168시간 인기 메뉴 TOP 3 조회 | 실제 MySQL 기간 경계·수량·동률 정렬 테스트 성공 |
 | [`S11-01`](https://github.com/usersy628/coffee-order-system/issues/8) | `BACKLOG` | `S6-01`, `S7-01`, `S8-01`, `S9-01`, `S10-01` | 기능 간 동시성·회귀, k6 부하 기준선과 인기 메뉴 `EXPLAIN ANALYZE` 검증 | p95·오류율·DB·락·Outbox 지표와 인덱스·확장 판단 근거 기록 |
@@ -65,16 +65,7 @@
 
 ## 진행 중인 작업 상세
 
-현재 `IN_PROGRESS` 작업은 없다. 다음 작업은 `S8-01`이지만 `READY` 전환 조건을 충족하기 전에는 구현하지 않는다.
-
-## 다음 구체화 대상
-
-`S8-01`의 다음 네 정책은 2026-07-15 사용자 승인으로 확정됐다. 이 문서 구조 변경 PR이 `dev`에 병합된 뒤 README에 반영하고, 정확한 대상 파일과 사전 실패 테스트를 작업 상세에 기록한 뒤에만 `READY`로 전환한다.
-
-1. 입력 순서와 무관하게 저장·응답·replay·Outbox items를 `menuId` 오름차순으로 통일하고 `position` 컬럼은 추가하지 않는다.
-2. null item, `menuId`·`quantity` 누락, 0·음수·`int` 초과는 `400 INVALID_ORDER_REQUEST`로 처리하고 새 최대 수량·아이템 수 제한은 추가하지 않는다.
-3. 명령당 `Instant` 하나를 마이크로초로 절삭해 주문·결제·포인트·Outbox `occurredAt`·`createdAt`에 재사용하고 `next_attempt_at`만 DB `UTC_TIMESTAMP(6)`를 사용한다.
-4. S8은 `PENDING` Outbox 한 건을 주문 트랜잭션에 저장하는 데까지만 담당하고 claim·lease·fencing·전송·retry·`PUBLISHED`·`FAILED`·Mock consumer는 S9로 둔다.
+현재 `IN_PROGRESS` 작업은 없다. `S8-01`의 완료 상세와 실제 검증 결과는 [`IMPLEMENTATION_HISTORY.md`](IMPLEMENTATION_HISTORY.md)에 보존한다.
 
 ## 작업 상세 템플릿
 
