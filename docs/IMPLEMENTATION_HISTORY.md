@@ -78,6 +78,7 @@
   - 동일 멱등 키 100개 동시 요청은 주문·차감·Outbox가 한 건만 생성되고, 서로 다른 주문 100개는 잔액 유실 없이 모두 직렬화됨을 실제 MySQL에서 검증했다.
   - 실제 MySQL 락 timeout의 전체 명령 3회 재시도와 소진 시 `503 CONCURRENT_REQUEST_TIMEOUT`, Outbox 저장 실패 시 주문·항목·차감·이력 전체 롤백을 검증했다.
   - 전체 테스트 65개가 성공했고 실패·오류·skip은 0개이며 `bootJar`와 `git diff --check`가 성공했다.
+  - PR #27의 필수 `Build and test`가 성공했다.
 - 계획 대비 변경 사항:
   - 이미 확정된 단일 schema 안에서 짧은 순차 SQL 트랜잭션과 락 순서를 명확히 유지하기 위해 예상했던 여러 JPA entity·repository 대신 `JdbcTemplate` 기반 `OrderTransactionExecutor`로 구현했다. 새 domain entity나 repository interface는 만들지 않았다.
   - 같은 사용자 요청이 지갑 락으로 먼저 직렬화되므로 주문 전용 `OrderReplayReader` 없이 같은 transaction의 `FOR UPDATE` current read로 replay를 복원했다. 유니크 제약은 최종 방어선으로 유지했다.
