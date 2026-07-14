@@ -1,0 +1,27 @@
+name: coffee-order-system-perf
+
+services:
+  mysql-perf:
+    image: mysql:8.4.10
+    environment:
+      MYSQL_DATABASE: coffee_order_perf
+      MYSQL_USER: ${PERF_MYSQL_USER:?Set PERF_MYSQL_USER outside the repository.}
+      MYSQL_PASSWORD: ${PERF_MYSQL_PASSWORD:?Set PERF_MYSQL_PASSWORD outside the repository.}
+      MYSQL_ROOT_PASSWORD: ${PERF_MYSQL_ROOT_PASSWORD:?Set PERF_MYSQL_ROOT_PASSWORD outside the repository.}
+    ports:
+      - "127.0.0.1:${PERF_MYSQL_PORT:-3308}:3306"
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_0900_ai_ci
+      - --default-time-zone=+00:00
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -uroot -p\"$$MYSQL_ROOT_PASSWORD\" --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 10s
+    volumes:
+      - coffee-order-system-perf-mysql-data:/var/lib/mysql
+
+volumes:
+  coffee-order-system-perf-mysql-data:
