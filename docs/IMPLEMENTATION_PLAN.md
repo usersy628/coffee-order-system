@@ -66,7 +66,7 @@
 ### [`S7-01`](https://github.com/usersy628/coffee-order-system/issues/4) 포인트 충전·이력·멱등성·동시성 구현
 
 - 상태: `DONE`
-- 완료 커밋: `1971658`, `3227271`, `648f225`, `6a1a688`
+- 완료 커밋: `1971658`, `3227271`, `648f225`, `6a1a688`, `4c1ebbf`
 - 사용자 승인: 2026-07-14
 - 목적: `POST /api/users/{userId}/points/charges`에서 충전 한도, 지갑과 이력의 원자성, 멱등 결과 재현과 MySQL 비관적 락 기반 동시성 제어를 구현한다.
 - 요구사항 근거:
@@ -90,6 +90,7 @@
   - `src/main/java/com/usersy628/coffeeorder/point/application/PointChargeReplayReader.java`
   - `src/main/java/com/usersy628/coffeeorder/point/application/PointChargeRequestHasher.java`
   - `src/main/java/com/usersy628/coffeeorder/point/application/PointChargeRetryProperties.java`
+  - `src/main/java/com/usersy628/coffeeorder/point/application/PointChargeRetryFailureException.java`
   - `src/main/java/com/usersy628/coffeeorder/point/application/PointWalletRepository.java`
   - `src/main/java/com/usersy628/coffeeorder/point/application/PointHistoryRepository.java`
   - `src/main/java/com/usersy628/coffeeorder/point/domain/PointWallet.java`
@@ -139,12 +140,14 @@
   - PR을 별도 검토와 사용자의 명시적 승인 전까지 병합하지 않는다.
 - 실제 검증 결과:
   - 구현 전 `PointChargeApiIntegrationTest`는 실제 MySQL 8.4.10에서 `404 ENDPOINT_NOT_FOUND`로 실패하는 RED를 확인했다.
-  - 포인트 API·재시도·동시성 및 기존 회귀를 포함한 전체 테스트 44개가 성공했고 실패·오류·skip은 0개다.
+  - 포인트 API·재시도·동시성 및 기존 회귀를 포함한 전체 테스트 45개가 성공했고 실패·오류·skip은 0개다.
   - 동일 사용자 100개 충전, 동일 멱등 키 100개 요청, 서로 다른 사용자 병렬 충전, 실제 락 타임아웃과 강제 데드락을 검증했다.
   - 이력 저장 실패 시 지갑 변경도 롤백되고 UTC 마이크로초 DB 시각과 `+09:00` 응답이 같은 순간인지 검증했다.
   - `bootJar`와 `git diff --check`가 성공했다.
+  - PR #24 리뷰 후 503 재시도 실패가 시도 횟수와 원인 타입을 보존하고 민감정보 없이 WARN으로 기록되는 계약 테스트를 추가했다.
 - 계획 대비 변경 사항:
   - 기능 완료 뒤 README 구현 상태가 뒤처지지 않도록 `README.md`를 대상 파일과 구현 범위에 추가했다.
+  - PR #24 리뷰에 따라 `PointChargeRetryFailureException`을 추가해 503 응답 변환 전 운영 로그 문맥을 보존했다.
   - Flyway schema와 seed는 계획대로 변경하지 않았다.
 - 검증 명령:
 
