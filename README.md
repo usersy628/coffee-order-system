@@ -39,7 +39,7 @@
 - 다중 서버 동시성은 `SELECT ... FOR UPDATE`를 이용한 DB 비관적 락으로 제어합니다.
 - 충전 API도 `Idempotency-Key`를 필수로 받아 응답 유실 후 재요청으로 같은 금액이 중복 충전되는 것을 방지합니다.
 - 충전 멱등 키와 `amount`의 SHA-256 요청 해시는 `point_history`의 `CHARGE` 이력에 저장합니다.
-- 외부 API는 포인트 지갑 락을 보유한 트랜잭션 안에서 호출하지 않습니다.
+- 포인트 충전과 결제는 서버 DB 안에서 처리하며 외부 결제사나 PG API를 호출하지 않습니다. 이번 과제의 유일한 외부 HTTP 연동은 주문 커밋 후 Outbox 게시자가 호출하는 데이터 수집 플랫폼입니다.
 
 ### 주문
 
@@ -67,13 +67,13 @@
 ### 외부 데이터 플랫폼
 
 - Transactional Outbox 패턴을 사용합니다.
-- 주문 트랜잭션에서는 외부 API를 호출하지 않고 Outbox 이벤트까지만 저장합니다.
-- 별도 게시자가 커밋된 이벤트를 외부 플랫폼으로 전송합니다.
+- 주문 트랜잭션에서는 데이터 수집 플랫폼을 호출하지 않고 Outbox 이벤트까지만 저장합니다.
+- 별도 게시자가 커밋된 이벤트를 과제용 Mock 데이터 플랫폼으로 HTTP 전송합니다. 실제 외부 서비스 계정이나 결제 API는 필요하지 않습니다.
 - 전송 성공 전까지 같은 이벤트가 중복 전달될 수 있는 at-least-once 시도 모델을 사용하며, 소비자는 `eventId`로 중복 이벤트를 제거해야 합니다.
-- 최대 시도 후 `FAILED`가 된 이벤트는 운영자 redrive가 필요하므로 외부 플랫폼이 영구 장애인 상황까지 자동으로 최종 전달을 보장한다고 표현하지 않습니다.
+- 최대 시도 후 `FAILED`가 된 이벤트는 자동 최종 전달을 보장하지 않으며 과제에서는 상태와 마지막 오류를 남겨 확인할 수 있게 합니다. 운영자 redrive와 보관·정리 배치는 실무 확장 범위로 둡니다.
 - 2xx는 이벤트 전송 성공으로 처리하지만 주문 성공 조건에는 영향을 주지 않습니다.
-- 네트워크 오류, timeout, 재시도 가능한 4xx와 5xx는 지수 백오프와 jitter로 최초 실패 후 최대 5회 재시도합니다. 최초 전송을 포함한 최대 시도 횟수는 6회입니다.
-- 4xx는 상태군만으로 일괄 처리하지 않고 외부 플랫폼 계약과 오류 코드를 기준으로 재시도, 성공 또는 영구 실패를 구분합니다.
+- 네트워크 오류, timeout과 5xx는 지수 백오프와 jitter로 최초 실패 후 최대 5회 재시도합니다. 최초 전송을 포함한 최대 시도 횟수는 6회입니다.
+- 과제용 Mock 계약에서는 4xx를 요청 데이터 오류로 보고 즉시 `FAILED`로 전환합니다. 실제 플랫폼 계약이 생기면 408·429 같은 재시도 가능 응답을 별도로 분류합니다.
 
 ### 인기 메뉴
 
@@ -376,12 +376,29 @@ sequenceDiagram
 
 - 모든 잔액 변경 경로는 `point_wallet`을 먼저 잠근 뒤 주문 또는 충전 멱등 데이터를 생성합니다. 같은 자원을 서로 다른 순서로 잠그지 않습니다.
 - 트랜잭션 안에서는 DB 작업만 수행하고 외부 HTTP 호출, 대기와 긴 계산을 하지 않습니다.
-- 초기 설정은 지갑 락 대기 2초, 명령 트랜잭션 timeout 5초로 두고 부하 테스트 결과에 따라 조정합니다.
-- 데드락 또는 락 획득 타임아웃은 비즈니스 실패가 아니라 일시적인 인프라 충돌로 분류합니다.
+- 지갑 락 대기 2초는 각 트랜잭션 시도에 적용하는 초기 fail-fast 값입니다. 정상 명령은 짧게 끝나야 하므로 같은 지갑의 장기 대기로 요청 스레드와 DB 커넥션이 쌓이는 것을 막고, 부하 테스트의 락 대기 분포를 보고 조정합니다.
+- 명령 트랜잭션 timeout 5초는 락 대기 최대 2초와 주문·이력·Outbox 저장 시간을 포함하는 각 DB 트랜잭션 시도의 상한입니다. 외부 HTTP 호출과 전체 API 응답 시간을 뜻하지 않습니다.
+- 데드락 또는 락 획득 타임아웃은 요청 내용이 잘못된 비즈니스 실패가 아니라 실행 순서가 바뀌면 성공할 수 있는 일시적인 인프라 충돌로 분류합니다.
 - 재시도는 실패한 SQL 한 문장이 아니라 트랜잭션 경계 밖에서 전체 명령을 새 트랜잭션으로 수행합니다.
 - 최초 시도 후 최대 2회 재시도하며 50ms, 100ms 기준 지수 백오프와 ±20% jitter를 적용합니다. 이 값은 설정으로 분리합니다.
 - 재시도 소진 시 `503 Service Unavailable`, `CONCURRENT_REQUEST_TIMEOUT`을 반환하고 클라이언트는 같은 멱등 키로 안전하게 다시 요청할 수 있습니다.
 - 구현 테스트에서는 동일 사용자 100개 동시 요청, 서로 다른 사용자 병렬 요청, 강제 데드락과 락 타임아웃을 검증합니다.
+
+## 예외 처리와 추적
+
+예외는 서비스 계층에서 HTTP 응답으로 직접 바꾸지 않습니다. 트랜잭션 안에서 발생한 예외는 밖으로 전파하여 먼저 롤백하고, `@RestControllerAdvice`가 한 곳에서 공통 오류 응답으로 변환합니다. 컨트롤러마다 `try/catch`를 반복하지 않습니다.
+
+| 분류 | 처리 위치와 정책 |
+| --- | --- |
+| JSON 문법·타입 오류 | `HttpMessageNotReadableException`을 `400 MALFORMED_JSON`으로 변환합니다. 예를 들어 문자열 형태의 `amount`는 범위 오류가 아니라 JSON 타입 오류입니다. |
+| 요청 값 검증 | Bean Validation과 교차 필드 검증 결과를 충전은 `INVALID_CHARGE_AMOUNT`, 주문은 `INVALID_ORDER_REQUEST`로 변환합니다. 여러 오류는 `details.fieldErrors` 배열에 `field`, `reason`, 선택적인 `rejectedValue`로 반환합니다. |
+| 도메인 오류 | 작은 `ErrorCode`와 단일 `DomainException` 조합으로 기존 404·409 정책을 표현하며 오류 코드마다 예외 클래스를 만들지 않습니다. |
+| 멱등 유니크 충돌 | 모든 `DataIntegrityViolationException`을 409로 바꾸지 않습니다. 이름을 지정한 멱등 유니크 제약만 명령 계층에서 식별하여 전체 롤백 후 새 읽기 전용 트랜잭션으로 재현 또는 `IDEMPOTENCY_KEY_REUSED`를 판단합니다. 그 밖의 FK·CHECK 위반은 구현 결함으로 취급합니다. |
+| 락·데드락 | Advice에서 즉시 변환하지 않고 트랜잭션 밖 재시도 계층이 전체 명령을 새 트랜잭션으로 재시도합니다. 소진된 전용 예외만 `503 CONCURRENT_REQUEST_TIMEOUT`으로 변환합니다. |
+| Outbox 전송 오류 | 주문 요청의 Advice 대상이 아닙니다. 게시자가 `PENDING`, `PROCESSING`, `PUBLISHED`, `FAILED` 상태 전이와 `last_error`로 처리합니다. |
+| 예상하지 못한 오류 | `500 INTERNAL_SERVER_ERROR`, 일반화된 메시지, 빈 `details`와 `traceId`만 반환하고 내부 예외 메시지와 스택 트레이스는 노출하지 않습니다. |
+
+요청 시작 시 `OncePerRequestFilter`가 서버가 신뢰하는 UUID `traceId`를 만들고 MDC와 `X-Trace-Id` 응답 헤더에 같은 값을 넣습니다. 외부에서 전달된 값을 그대로 신뢰하지 않으며 요청 종료 시 MDC를 제거합니다. 예상된 4xx는 스택 없이 기록하고, 재시도 소진 503은 시도 횟수와 함께 경고로, 예상하지 못한 500은 서버 로그에만 스택과 함께 기록합니다. 원문 `Idempotency-Key`, 전체 요청·이벤트 payload, 인증정보와 외부 응답 전문은 로그에 남기지 않습니다. 비동기 전송은 요청 trace 대신 `eventId`와 `orderId`를 상관관계 식별자로 사용합니다.
 
 ## ERD
 
@@ -457,17 +474,12 @@ erDiagram
         JSON payload
         VARCHAR status
         INT attempt_count
-        INT redrive_count
         DATETIME next_attempt_at
-        VARCHAR locked_by
         DATETIME locked_at
         CHAR claim_token
-        INT last_http_status
         DATETIME published_at
         DATETIME failed_at
-        DATETIME resolved_at
-        VARCHAR resolution_note
-        TEXT last_error
+        VARCHAR last_error
         DATETIME created_at
     }
 ```
@@ -596,30 +608,22 @@ CHECK (
 | `payload` | `JSON` | NOT NULL | 재시도마다 동일하게 보내는 이벤트 전문 |
 | `status` | `VARCHAR(20)` | NOT NULL | `PENDING`, `PROCESSING`, `PUBLISHED`, `FAILED` |
 | `attempt_count` | `INT` | NOT NULL, DEFAULT 0 | 선점되어 전송 단계에 진입한 횟수 |
-| `redrive_count` | `INT` | NOT NULL, DEFAULT 0 | 운영자 재처리 횟수 |
 | `next_attempt_at` | `DATETIME(6)` | NULL 허용 | `PENDING`의 다음 재시도 가능 시각 |
-| `locked_by` | `VARCHAR(100)` | NULL 허용 | 선점한 게시자 인스턴스 식별자 |
 | `locked_at` | `DATETIME(6)` | NULL 허용 | 선점 시각 |
 | `claim_token` | `CHAR(36)` | NULL 허용 | 선점마다 새로 발급하는 fencing UUID |
-| `last_http_status` | `SMALLINT UNSIGNED` | NULL 허용 | 마지막 외부 HTTP 상태 |
 | `published_at` | `DATETIME(6)` | NULL 허용 | 전송 완료 시각 |
 | `failed_at` | `DATETIME(6)` | NULL 허용 | 최종 실패 전환 시각 |
-| `resolved_at` | `DATETIME(6)` | NULL 허용 | 운영자가 영구 실패를 확인한 시각 |
-| `resolution_note` | `VARCHAR(500)` | NULL 허용 | 민감정보를 제외한 확인 사유 |
-| `last_error` | `TEXT` | NULL 허용 | 마지막 실패 원인 |
+| `last_error` | `VARCHAR(1000)` | NULL 허용 | 민감정보와 외부 응답 전문을 제거한 마지막 실패 요약 |
 | `created_at` | `DATETIME(6)` | NOT NULL | 이벤트 생성 시각 |
 
 - `UNIQUE (event_id)`
 - `UNIQUE (order_id, event_type)`
 - `CHECK (status IN ('PENDING', 'PROCESSING', 'PUBLISHED', 'FAILED'))`
 - `CHECK (attempt_count BETWEEN 0 AND 6)`
-- `CHECK (redrive_count >= 0)`
 - `CHECK (schema_version >= 1)`
-- `CHECK (last_http_status IS NULL OR last_http_status BETWEEN 100 AND 599)`
-- `PENDING`이면 `attempt_count < 6`, `next_attempt_at IS NOT NULL`이어야 하며 claim 정보가 없어야 합니다.
-- `PROCESSING`이면 `locked_by`, `locked_at`, `claim_token`이 모두 존재해야 합니다.
-- `PUBLISHED`이면 `published_at`, `FAILED`이면 `failed_at`이 존재해야 하며 두 terminal 상태에는 `next_attempt_at`과 claim 정보가 없어야 합니다.
-- `resolved_at`은 `FAILED`에서만 사용할 수 있고 값이 있으면 `resolution_note`도 존재해야 합니다.
+- 새 이벤트는 `PENDING`, `attempt_count = 0`, `next_attempt_at = UTC_TIMESTAMP(6)`으로 생성합니다. 모든 `PENDING`은 `attempt_count < 6`, `next_attempt_at IS NOT NULL`이어야 하며 claim 정보가 없어야 합니다.
+- `PROCESSING`이면 `locked_at`, `claim_token`이 모두 존재해야 합니다.
+- `PUBLISHED`이면 `published_at`, `FAILED`이면 `failed_at`과 `last_error`가 존재해야 하며 두 terminal 상태에는 `next_attempt_at`과 claim 정보가 없어야 합니다. 6번째 lease 만료도 `LEASE_EXPIRED_MAX_ATTEMPTS` 같은 내부 사유를 기록합니다.
 - `FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE RESTRICT`
 
 `UNIQUE (order_id, event_type)`은 현재 주문마다 `ORDER_COMPLETED` 이벤트가 하나뿐이라는 정책에 맞습니다. 향후 같은 주문에서 동일 타입의 이벤트를 여러 번 발행해야 한다면 aggregate version을 추가하고 이 제약을 확장합니다.
@@ -664,12 +668,12 @@ FROM order_event_outbox
 WHERE status = 'PENDING'
   AND attempt_count < 6
   AND next_attempt_at <= UTC_TIMESTAMP(6)
-ORDER BY created_at, id
+ORDER BY next_attempt_at, id
 LIMIT :claim_limit
 FOR UPDATE SKIP LOCKED;
 ```
 
-`:claim_limit`은 설정된 배치 크기와 현재 즉시 실행 가능한 worker 슬롯 수 중 작은 값입니다. 선점 트랜잭션에서 `PROCESSING`으로 변경하고 `attempt_count`를 1 증가시키며 `next_attempt_at`을 비우고 `locked_by`, `locked_at`과 매번 새로운 `claim_token`을 기록합니다. 이 시점의 attempt는 네트워크 호출 완료가 아니라 전송 단계에 진입한 횟수이며, 프로세스가 호출 직전에 종료되어도 보수적으로 retry budget을 소비합니다. 트랜잭션을 커밋한 후에만 외부 API를 호출합니다.
+`:claim_limit`은 설정된 배치 크기와 현재 즉시 실행 가능한 worker 슬롯 수 중 작은 값입니다. 선점 트랜잭션에서 `PROCESSING`으로 변경하고 `attempt_count`를 1 증가시키며 `next_attempt_at`을 비우고 `locked_at`과 매번 새로운 `claim_token`을 기록합니다. 이 시점의 attempt는 네트워크 호출 완료가 아니라 전송 단계에 진입한 횟수이며, 프로세스가 호출 직전에 종료되어도 보수적으로 retry budget을 소비합니다. 트랜잭션을 커밋한 후에만 데이터 수집 플랫폼을 호출합니다.
 
 외부 플랫폼이 이벤트를 수신한 직후 게시자가 종료되면 같은 이벤트가 다시 전송될 수 있습니다. 따라서 게시자는 매번 같은 `event_id`를 사용하고, 외부 API가 멱등 헤더를 지원하면 같은 값을 `Idempotency-Key`로 전달합니다. Mock API 테스트에서도 소비자의 중복 제거를 검증합니다.
 
@@ -679,13 +683,11 @@ FOR UPDATE SKIP LOCKED;
 stateDiagram-v2
     [*] --> PENDING: 주문과 함께 저장
     PENDING --> PROCESSING: claim + attempt_count 증가
-    PROCESSING --> PUBLISHED: 2xx 또는 확인된 중복 성공
+    PROCESSING --> PUBLISHED: 2xx
     PROCESSING --> PENDING: 재시도 가능 실패, attempt_count < 6
     PROCESSING --> PENDING: lease 만료, attempt_count < 6
     PROCESSING --> FAILED: lease 만료, attempt_count = 6
     PROCESSING --> FAILED: 영구 실패 또는 attempt_count = 6
-    FAILED --> PENDING: 운영자 redrive
-    PUBLISHED --> [*]: 보관 기간 후 삭제
 ```
 
 lease timeout은 기본 30초이며 전체 HTTP call deadline 5초보다 충분히 길게 둡니다. 만료된 `PROCESSING` 이벤트는 `status = 'PROCESSING' AND locked_at < :lease_expired_at` 조건으로 원자적으로 회수합니다. `attempt_count < 6`이면 `PENDING`과 현재 UTC의 `next_attempt_at`으로 바꾸고, 6이면 `FAILED`와 `failed_at`을 기록합니다. 두 경우 모두 기존 claim 정보를 지웁니다. 회수된 이벤트를 다른 게시자가 선점하면 반드시 새로운 `claim_token`을 발급합니다.
@@ -697,11 +699,9 @@ UPDATE order_event_outbox
 SET status = 'PUBLISHED',
     published_at = UTC_TIMESTAMP(6),
     next_attempt_at = NULL,
-    last_http_status = :success_status,
     last_error = NULL,
     failed_at = NULL,
     claim_token = NULL,
-    locked_by = NULL,
     locked_at = NULL
 WHERE id = :id
   AND status = 'PROCESSING'
@@ -715,29 +715,22 @@ WHERE id = :id
 | 결과 | 처리 |
 | --- | --- |
 | `2xx` | `PUBLISHED` |
-| 외부 계약이 명시한 `EVENT_ALREADY_PROCESSED` | 동일 `eventId`가 이미 처리된 것이므로 성공으로 간주 |
-| 네트워크 오류, connect/read timeout | 재시도 |
-| `408`, `425`, `429` | 재시도, `429`는 `Retry-After` 우선 적용 |
+| 네트워크 오류 또는 timeout | 재시도 |
 | `5xx` | 재시도 |
-| `401`, `403` | 인증·설정 장애로 즉시 `FAILED`, 경보 후 설정 복구와 redrive |
-| `400`, `404`, `422` | payload 또는 계약 오류로 `FAILED` |
-| `409` 및 그 밖의 `4xx` | 외부 오류 코드를 확인하여 중복 성공, 재시도 또는 영구 실패로 분류 |
+| `4xx` | 과제용 Mock 계약에서는 데이터 오류로 보고 `FAILED` |
 
-- 최초 시도는 즉시 수행하고 실패 후 1초, 2초, 4초, 8초, 16초 기준 지수 백오프에 ±20% jitter를 적용합니다. 내부 계산의 최대 지연은 기본 30초이며 모두 설정으로 분리합니다. `429 Retry-After`가 더 길면 외부 플랫폼이 지정한 시각을 우선합니다.
-- 6번째 시도까지 실패하면 `FAILED`, `failed_at`, `last_http_status`, `last_error`를 기록합니다.
-- HTTP 클라이언트 내부 자동 재시도는 비활성화하여 Outbox의 attempt 계산과 중복되지 않게 합니다. DNS, connection pool 대기, TLS, connect와 read를 포함한 전체 call deadline은 기본 5초로 제한합니다.
-- 게시 주기는 기본 1초, 배치 크기와 인스턴스별 동시 외부 호출 수는 각각 10으로 시작합니다. 한 번에 선점하는 수는 즉시 실행 가능한 worker 슬롯 수를 초과하지 않습니다. 전체 외부 호출 동시성은 `인스턴스 수 × 인스턴스별 동시성`이므로 외부 플랫폼의 전체 rate limit에 맞춰 조정합니다.
-- 정상 종료 시 새 선점을 중단하고 진행 중 호출을 최대 10초 기다립니다. 끝나지 않은 claim은 상태를 억지로 덮어쓰지 않고 lease 회수에 맡깁니다.
+- 최초 시도는 즉시 수행하고 실패 후 1초, 2초, 4초, 8초, 16초 기준 지수 백오프에 ±20% jitter를 적용합니다. 최초 실패 후 최대 5회 재시도하며 6번째 시도까지 실패하면 `FAILED`, `failed_at`, `last_error`를 기록합니다.
+- HTTP 클라이언트 내부 자동 재시도는 비활성화합니다. 재시도 소유자를 Outbox 하나로 제한하여 숨은 중복 호출을 막고 시도 예산을 한 곳에서 관리합니다. 단, `attempt_count`는 전송 단계 진입 횟수이므로 claim 후 HTTP 호출 전에 프로세스가 종료되면 실제 호출 수보다 클 수 있습니다.
+- 한 번의 전체 HTTP call deadline은 기본 5초입니다. DNS, connection pool 대기, TLS, connect와 read를 모두 포함하여 느린 외부 플랫폼이 worker를 장시간 점유하지 않게 하고, 30초 lease 안에서 호출과 상태 갱신을 마칠 여유를 둡니다. 이 시간은 주문 API timeout이 아닙니다.
+- 게시 주기 1초는 DB polling 부하와 실시간 전송의 발견 지연 사이의 초기 절충값입니다. 배치 10은 한 번에 잠그는 행 수를 작게 유지하기 위한 시작값이고, 인스턴스별 동시성 10은 선점한 이벤트를 내부 대기열에 쌓지 않고 즉시 보낼 수 있도록 배치와 맞춘 값입니다.
+- 위 수치는 측정된 정답이 아니라 외부 설정으로 바꿀 초기값입니다. 전체 외부 호출 동시성은 `인스턴스 수 × 인스턴스별 동시성`이므로 수집 플랫폼의 전체 rate limit을 넘지 않는 범위에서 부하 테스트로 조정합니다.
 
-### FAILED redrive, 보관과 관측
+### 과제 구현 범위와 관측
 
-redrive는 공개 API가 아닌 운영 명령으로 제공합니다. 원인을 해결한 뒤 `FAILED` 이벤트를 `PENDING`으로 바꾸고 `attempt_count`를 0으로 초기화하며 `redrive_count`를 증가시킵니다. `next_attempt_at`은 현재 UTC 시각으로 설정하고 claim, `failed_at`, `resolved_at`, `resolution_note`를 지우되 직전 `last_error`는 감사 목적으로 다음 결과가 기록될 때까지 유지합니다.
-
-- `PUBLISHED` 이벤트는 기본 7일 보관 후 한 번에 최대 1,000건씩 삭제합니다.
-- `FAILED` 이벤트는 성공적으로 redrive되거나 운영자가 확인하기 전에는 자동 삭제하지 않습니다. 재처리하지 않을 영구 실패는 운영자가 `resolved_at`, `resolution_note`를 기록하고, 확인 후 30일 동안 보관한 뒤 별도 감사 로그를 남기고 배치 삭제합니다.
-- 가장 오래된 `PENDING` 나이, 상태별 건수, 성공률, 재시도 횟수, lease 회수 횟수, redrive 횟수와 외부 응답 지연을 메트릭으로 수집합니다.
-- `FAILED` 발생, 가장 오래된 `PENDING` 나이 임계치 초과와 연속 인증 오류에 경보를 설정합니다.
-- Mock 소비자는 `eventId` 유니크 기록과 수집 데이터 반영을 한 트랜잭션으로 처리합니다. 같은 이벤트를 다시 받으면 데이터를 중복 반영하지 않고 이미 처리된 결과를 반환합니다.
+- Mock 소비자는 `eventId` 유니크 기록과 수집 데이터 반영을 한 트랜잭션으로 처리합니다. 같은 이벤트를 다시 받으면 데이터를 중복 반영하지 않고 기존 처리 결과와 `200 OK`를 반환하여 게시자가 `PUBLISHED`로 확정할 수 있게 합니다.
+- `last_error`에는 길이를 제한한 오류 종류와 요약만 저장하고 인증정보, 외부 응답 전문과 전체 payload는 저장하지 않습니다.
+- `PENDING`의 가장 오래된 대기 시간, 상태별 건수, 전송 성공·실패 수와 lease 회수 횟수만 우선 관찰합니다.
+- 운영자 redrive, 보관 기간별 정리 배치, 감사 사유와 전용 관리 API는 과제 구현에서 제외합니다. 실제 운영 요구가 생기면 그때 컬럼과 정리용 인덱스를 함께 추가합니다.
 
 초기 운영 파라미터는 다음과 같으며 모두 외부 설정으로 분리합니다.
 
@@ -746,36 +739,72 @@ redrive는 공개 API가 아닌 운영 명령으로 제공합니다. 원인을 �
 | 게시 주기 | 1초 |
 | 배치 크기 | 10 |
 | 인스턴스별 외부 호출 동시성 | 10 |
-| connect / read timeout | 1초 / 3초 |
 | 전체 HTTP call deadline | 5초 |
 | lease timeout | 30초 |
 | 최초 실패 후 최대 재시도 | 5회 |
 | 백오프 기준 | 1초, 2초, 4초, 8초, 16초 + ±20% jitter |
-| 최대 백오프 | 30초 |
-| `PUBLISHED` 보관 기간 | 7일 |
-| 확인된 `FAILED` 보관 기간 | 30일 |
-| 정리 배치 크기 | 1,000 |
 
 ## 인덱스
 
 | 테이블 | 인덱스 | 목적 |
 | --- | --- | --- |
 | `orders` | `UNIQUE (user_id, idempotency_key)` | 사용자별 멱등성 보장 |
-| `orders` | `INDEX (paid_at, id)` | 현재 모든 주문이 `PAID`인 범위에서 최근 168시간 탐색 |
+| `orders` | `INDEX (paid_at)` | 현재 모든 주문이 `PAID`인 범위에서 최근 168시간 탐색 |
 | `order_item` | `UNIQUE (order_id, menu_id)` | 주문 내 메뉴 중복 방지 |
+| `order_item` | `INDEX (menu_id)` | `menu_id` FK 지원. InnoDB 자동 생성에 맡기지 않고 migration에서 이름을 고정 |
 | `point_history` | `UNIQUE (order_id)` | 주문별 중복 차감 방지 |
 | `point_history` | `UNIQUE (user_id, idempotency_key)` | 사용자별 충전 멱등성 보장 |
-| `point_history` | `INDEX (user_id, created_at, id)` | 사용자 포인트 이력 조회 |
 | `order_event_outbox` | `UNIQUE (event_id)` | 이벤트 식별자 중복 방지 |
 | `order_event_outbox` | `UNIQUE (order_id, event_type)` | 주문 이벤트 중복 생성 방지 |
-| `order_event_outbox` | `INDEX (status, next_attempt_at, created_at, id)` | 전송 대상 배치 조회 |
+| `order_event_outbox` | `INDEX (status, next_attempt_at)` | 전송 대상 배치 조회 |
 | `order_event_outbox` | `INDEX (status, locked_at)` | 만료된 `PROCESSING` 이벤트 회수 |
-| `order_event_outbox` | `INDEX (status, published_at, id)` | 보관 기간이 지난 `PUBLISHED` 정리 |
-| `order_event_outbox` | `INDEX (status, resolved_at, id)` | 확인 후 보관 기간이 지난 `FAILED` 정리 |
 
-현재 `orders.status`는 항상 `PAID`이므로 선택도가 없는 `status`를 선두에 두지 않습니다. 취소 등 다른 상태가 추가되면 `(status, paid_at, id)`를 다시 검토합니다. `order_item`의 `(order_id, menu_id, quantity)` covering index는 기존 유니크 인덱스와 중복 비용이 있으므로 기본 생성하지 않고, 실제 집계 쿼리의 테이블 접근 비용이 병목일 때만 추가합니다.
+InnoDB 보조 인덱스 리프에는 PK가 암묵적으로 포함되므로 마지막 `id`를 반복해서 선언하지 않습니다. Outbox 선점도 `ORDER BY next_attempt_at, id`로 인덱스 순서와 맞춥니다. 현재 `orders.status`는 항상 `PAID`이므로 선택도가 없는 `status`를 선두에 두지 않으며, 취소 등 다른 상태가 추가되면 `(status, paid_at)`을 다시 검토합니다.
+
+`order_item`의 유니크 인덱스는 `order_id` 조인을 함께 지원합니다. `(order_id, menu_id, quantity)` covering index와 과제 범위에 없는 포인트 이력 조회용 인덱스, Outbox 보관·정리용 인덱스는 미리 만들지 않습니다. 실제 조회 API나 정리 배치를 구현하고 실행계획에서 필요성이 확인될 때 추가합니다.
 
 MySQL Testcontainers에 소량 데이터뿐 아니라 최근 168시간 주문이 충분히 포함된 테스트 데이터를 넣고 `EXPLAIN ANALYZE`로 범위 탐색 행 수, 조인 순서와 실제 실행 시간을 확인합니다. 사용되지 않거나 쓰기 비용만 늘리는 인덱스는 제거합니다.
+
+## 부하 대응과 확장 기준
+
+현재 기준 구성은 stateless 애플리케이션 여러 대와 하나의 MySQL primary입니다. Redis, Kafka와 MySQL read replica는 구현하지 않습니다. 강의에서 학습한 Kafka·Redis ZSET 방식은 매우 빈번한 근실시간 랭킹에는 유용하지만, 이번 과제의 인기 메뉴는 요청 시각 `T`마다 달라지는 정확한 `[T - 168시간, T)` rolling window입니다. 먼저 원본 주문을 SQL로 집계하고, 부하 테스트로 병목이 확인되기 전에는 인프라를 추가하지 않습니다.
+
+### 정합성에 따른 데이터 경로
+
+| 데이터·작업 | 현재 경로 | 확장 허용 조건 |
+| --- | --- | --- |
+| 포인트 충전·차감·잔액 검증 | MySQL primary 필수 | replica·Redis 사용 금지 |
+| 주문 가격·판매 상태·멱등성 확인 | MySQL primary 필수 | replica·Redis 사용 금지 |
+| 주문·이력·Outbox 저장과 Outbox 선점 | MySQL primary 필수 | replica·Redis 사용 금지 |
+| 메뉴 목록 | MySQL primary | 짧은 stale을 허용하는 정책이 생길 때 read replica 또는 캐시 검토 |
+| 인기 메뉴 TOP 3 | MySQL primary 직접 집계 | 최대 stale 시간과 캐시 기준 시각을 제품 정책으로 승인한 뒤 replica·캐시 검토 |
+
+read replica는 읽기 처리량을 분산할 뿐 락 경합이나 쓰기 병목을 해결하지 못하며 비동기 복제 지연이 있습니다. 포인트·주문·멱등성·Outbox처럼 read-after-write와 current read가 필요한 쿼리는 계속 primary로 보냅니다. 메뉴 목록이나 인기 메뉴도 현재는 즉시 일치 정책이므로 primary를 사용하고, 나중에 허용 가능한 stale 범위를 먼저 정한 뒤에만 분리합니다.
+
+### Redis를 도입하게 될 때의 장애 정책
+
+DB 부하와 Redis 메모리 과부하는 서로 다른 장애입니다. 현재 구성에는 Redis가 없으므로 DB 부하를 Redis로 우회한다는 정책도 없으며, 아래 내용은 Redis 도입 조건을 충족한 이후에만 적용합니다.
+
+- Redis는 재생성 가능한 cache-aside 조회 캐시로만 사용하고 MySQL을 유일한 원본으로 유지합니다. 포인트 잔액, 주문, 멱등 결과, Outbox 상태와 중복 제거 기록은 Redis에 저장하지 않습니다.
+- Redis timeout·장애·데이터 유실 시에는 짧은 timeout과 circuit breaker를 거쳐, 별도 동시성 bulkhead와 rate limit이 허용하는 범위에서만 MySQL로 우회합니다. 캐시 장애 트래픽으로 포인트·주문용 primary를 압박할 위험이 있으면 인기 메뉴 조회를 먼저 `503`으로 차단합니다. 캐시 용도에서는 Redis가 비영속이어도 정합성이 깨지지 않아야 하며, cold cache 집중은 TTL jitter와 요청 병합으로 완화합니다.
+- rolling window 캐시는 새 주문이 없어도 과거 주문이 범위 밖으로 빠져 결과가 바뀌므로 주문 시 무효화만으로 충분하지 않습니다. 시간 버킷이나 TTL을 쓰려면 `from`, `to`와 새 `generatedAt`도 캐시 생성 기준 시각에 맞추고 최대 stale 시간을 새 제품 정책으로 승인받아야 합니다. 초기 cache miss는 primary에서 조회하며, 향후 read replica까지 사용하면 `replication lag + cache age`가 승인된 stale 한도를 넘지 않아야 합니다.
+- Redis primary-replica 구성에 Sentinel을 결합하면 자동 failover를 제공하지만 비동기 복제의 최근 데이터 유실 가능성과 메모리 부족은 해결하지 않습니다. 제한된 DB fallback으로 SLO와 primary 보호 기준을 지키지 못한다는 장애 테스트 결과가 있을 때 독립 장애 영역의 Sentinel 3개 또는 관리형 Multi-AZ를 검토합니다. Redis Cluster는 키 공간과 메모리를 여러 shard로 분산할 수 있는 규모에서만 별도로 검토하며 하나의 hot key를 자동으로 분산하지는 못합니다.
+- Redis를 사용한다면 `maxmemory`를 명시하고 `used_memory/maxmemory`, fragmentation, eviction·OOM 거부, p95 응답 지연과 replica lag를 함께 관찰합니다. 70%는 10분 이상 지속될 때의 조기 경보 기준일 뿐 Sentinel이나 Cluster 도입 기준이 아닙니다.
+
+### 스케일 아웃 판단 신호
+
+다음 값은 보편적인 정답이 아니라 S11 부하 테스트를 시작하기 위한 관찰 기준입니다. 먼저 목표 트래픽과 API p95 SLO를 정하고 k6로 재현한 뒤, 한 번에 하나의 병목만 개선하고 같은 시나리오를 다시 측정합니다.
+
+| 신호 | 초기 판단 기준 | 우선 조치 |
+| --- | --- | --- |
+| 애플리케이션 포화 | p95 SLO 위반과 함께 인스턴스 CPU 70% 이상 또는 요청 실행기 사용률 80% 이상이 10분 지속, DB에는 여유가 있음 | 애플리케이션 인스턴스 수평 확장 |
+| DB 읽기 병목 | primary CPU 70% 이상이 15분 지속하거나 커넥션 풀 사용률 80% 이상이 5분 지속하고 읽기 쿼리가 주원인 | `EXPLAIN ANALYZE`와 쿼리·인덱스 개선 후, stale 허용 조회만 read replica 검토 |
+| DB 락 병목 | 락 대기 p95, 데드락 또는 `CONCURRENT_REQUEST_TIMEOUT` 비율 상승 | 애플리케이션 증설보다 트랜잭션 단축, hot key와 락 순서 점검. 무분별한 증설은 경합을 악화할 수 있음 |
+| 인기 메뉴 집계 병목 | 쿼리·인덱스 개선 후에도 SLO를 위반하고 해당 쿼리가 DB 시간의 20% 이상이며, 승인된 TTL·시간 버킷으로 요청 로그를 재생했을 때 반복 조회 이점이 확인됨 | Redis cache-aside와 집계 테이블을 시험 비교하고, warm-up 후 hit rate 80%는 도입 후 유지 기준으로 사용 |
+| Outbox 적체 | 가장 오래된 `PENDING`이 5초를 넘는 상태가 5분 지속하거나 backlog가 계속 증가 | 외부 rate limit과 DB 여유를 확인한 뒤 worker 동시성 또는 게시자 인스턴스 조정 |
+| Redis 메모리 압박 | Redis 도입 후 `used_memory/maxmemory` 70% 이상이 10분 지속하면서 eviction·OOM 거부·p95 지연 중 하나가 함께 증가 | TTL·값 크기·fragmentation과 메모리 증설을 먼저 점검하고, shard 가능한 키 공간의 단일 노드 한계일 때만 Cluster 검토 |
+
+RPS 자체만으로 스케일 아웃하지 않습니다. DB가 병목인데 애플리케이션만 늘리면 커넥션 수와 락 경쟁이 커질 수 있고, 외부 플랫폼이 병목인데 게시자만 늘리면 rate limit을 초과할 수 있으므로 지연·오류율·자원 포화·queue age를 함께 봅니다.
 
 ## 시간 저장 기준
 
@@ -793,13 +822,13 @@ MySQL Testcontainers에 소량 데이터뿐 아니라 최근 168시간 주문이
 
 | 문제 | 선택한 전략 | 검토한 대안 | 선택 이유 | 트레이드오프 및 보완 |
 | --- | --- | --- | --- | --- |
-| 다중 서버 포인트 동시성 | DB 비관적 락 `SELECT ... FOR UPDATE` | JVM `synchronized`, 낙관적 락 | 모든 서버가 공유하는 지갑 행을 잠가 검증과 갱신을 직렬화하고 잔액 음수를 방지합니다. | 동일 사용자 요청은 대기하므로 트랜잭션을 짧게 유지하고 외부 API를 락 밖에서 호출합니다. |
+| 다중 서버 포인트 동시성 | DB 비관적 락 `SELECT ... FOR UPDATE` | JVM `synchronized`, 낙관적 락 | 모든 서버가 공유하는 지갑 행을 잠가 검증과 갱신을 직렬화하고 잔액 음수를 방지합니다. | 동일 사용자 요청은 대기하므로 트랜잭션을 DB 작업만으로 짧게 유지하고 2초 락 대기로 fail-fast 합니다. |
 | 충전 멱등성 | `point_history`에 키와 요청 해시 저장, 지갑 락 후 재확인 | 비관적 락만 사용, 별도 멱등성 테이블 | 응답 유실 후 순차 재요청까지 중복 충전 없이 최초 결과로 복원합니다. | 실패 결과와 처리 중 상태는 저장하지 않으며 필요해지면 별도 테이블로 확장합니다. |
 | 주문 원자성 | 주문, 항목, 포인트 차감, 이력, Outbox를 한 DB 트랜잭션으로 저장 | 단계별 별도 저장과 보상 처리 | 중간 실패 시 일부 데이터만 남는 상태를 DB 롤백으로 방지합니다. | 트랜잭션 범위가 넓어질 수 있어 네트워크 호출은 포함하지 않습니다. |
 | 주문 멱등성 | `orders`에 키와 요청 해시 저장, DB 유니크 제약 | 별도 멱등성 테이블, 애플리케이션 선조회만 사용 | 주문과 멱등 결과가 같은 트랜잭션 생명주기를 가져 구조가 단순하며 유니크 제약이 동시 요청의 최종 방어선이 됩니다. | 처리 중 상태와 실패 응답을 별도로 저장하기 어렵습니다. 현재는 선행 트랜잭션 완료까지 대기하고 커밋 결과만 재사용합니다. |
 | 요청 동일성 판단 | 메뉴 ID 정렬 후 canonical payload의 SHA-256 저장 | 원본 JSON 문자열 비교 | JSON 필드나 메뉴 순서가 달라도 의미가 같은 요청을 동일하게 판단합니다. | canonical 규칙이 바뀌면 호환성 문제가 생기므로 규칙을 테스트로 고정합니다. |
 | 외부 데이터 전송 | Transactional Outbox | 주문 트랜잭션 안에서 직접 호출, 커밋 후 메모리 작업 큐 | 주문과 이벤트 저장의 원자성을 지키면서 외부 장애를 주문 성공과 분리합니다. | 게시자, 재시도와 정체 이벤트 모니터링이 추가로 필요합니다. |
-| 이벤트 전달 보장 | 중복 가능한 at-least-once 시도 모델과 `eventId` 중복 제거 | exactly-once 전달 | 네트워크 단절 시 전송 성공 여부를 완전히 알 수 없으므로 같은 이벤트 재전송을 허용하는 방식이 현실적입니다. | 소비자 멱등 처리가 필수이며 최대 시도 후에는 운영자 redrive가 있어야 전달을 재개할 수 있습니다. |
+| 이벤트 전달 보장 | 중복 가능한 at-least-once 시도 모델과 `eventId` 중복 제거 | exactly-once 전달 | 네트워크 단절 시 전송 성공 여부를 완전히 알 수 없으므로 같은 이벤트 재전송을 허용하는 방식이 현실적입니다. | 소비자 멱등 처리가 필수이며 최대 시도 후 `FAILED` 확인까지만 과제에 포함하고 redrive는 실무 확장으로 둡니다. |
 | Outbox 다중 인스턴스 선점 | `FOR UPDATE SKIP LOCKED`, 짧은 선점 트랜잭션, `claim_token` fencing | 분산 락, 인스턴스별 고정 파티션 | 별도 인프라 없이 여러 게시자가 잠긴 행을 건너뛰며 병렬 처리하고 늦게 끝난 작업자의 상태 덮어쓰기를 막습니다. | DB 지원 여부에 의존하며 lease 회수, timeout과 claim 소유권 조건을 함께 관리해야 합니다. |
 | 금액 타입 | Java `long`, MySQL `BIGINT` | `int`, 소수 타입 | 정수 포인트 정책에 맞고 합계 계산의 오버플로 여유와 도메인 타입 일관성을 확보합니다. | 현재 한도보다 넓은 타입이지만 DB `CHECK`와 애플리케이션 검증으로 정책 범위를 제한합니다. |
 | 주문 가격 보존 | `order_item`에 메뉴명과 가격 스냅샷 저장 | 조회 시 현재 `menu`만 조인 | 메뉴 정보가 바뀌어도 주문 당시 금액과 표시 내용을 재현할 수 있습니다. | 데이터가 중복되지만 주문 이력의 불변성과 추적 가능성을 우선합니다. |
@@ -807,7 +836,10 @@ MySQL Testcontainers에 소량 데이터뿐 아니라 최근 168시간 주문이
 | 현재 시각 취득 | `Clock` 주입 | 서비스 내부에서 `Instant.now()` 직접 호출 | 최근 168시간 경계를 테스트에서 고정하여 시작 포함·종료 제외 조건을 재현할 수 있습니다. | 생성자 의존성이 하나 늘지만 테스트 결정성을 얻습니다. |
 | API 경로 | `/api` 사용 | `/api/v1` URL 버전 | 현재 단일 과제 API를 간결하게 표현합니다. | 향후 호환되지 않는 변경이 생기면 별도 버전 전략이 필요합니다. |
 | 오류 응답 | `code`, `message`, `details`, `traceId` | RFC 9457 Problem Details | 과제에서 도메인 오류 코드를 간단히 드러내고 로그 추적성을 확보합니다. | 외부 상호운용성이 중요해지면 `application/problem+json`으로 확장합니다. |
+| 예외 변환 | `@RestControllerAdvice`, 작은 `ErrorCode`와 단일 도메인 예외 | 컨트롤러별 `try/catch`, 오류 코드별 예외 클래스 | 롤백 경계와 HTTP 표현을 분리하고 모든 API가 같은 오류 계약을 사용합니다. | 예상외 DB 제약 오류는 409로 숨기지 않고 500으로 드러내 테스트에서 결함을 찾습니다. |
+| 초기 인덱스 | 유니크·FK·실제 조회 및 선점 경로만 생성 | 예상 쿼리마다 covering index 선생성 | 쓰기 비용과 설계 설명을 줄이고 필요한 인덱스를 명확히 합니다. | 실제 데이터의 `EXPLAIN ANALYZE` 결과에 따라 추가·제거합니다. |
 | 인기 메뉴 조회 | 168시간 직접 SQL 집계 | 캐시, 집계 테이블, 스트리밍 집계 | 현재 데이터 규모에서는 가장 단순하고 원본 주문과 즉시 일치합니다. | `EXPLAIN ANALYZE`와 부하 테스트에서 병목이 확인된 뒤에만 사전 집계를 도입합니다. |
+| 부하 확장 | 병목 측정 후 애플리케이션·replica·Redis를 선택 | 처음부터 Redis·Sentinel·read replica 구성 | 사용하지 않는 인프라가 만드는 장애 지점과 운영 비용을 피하고 정합성 경계를 유지합니다. | Redis 도입 시 제한된 DB fallback 장애 테스트는 필수이며, 그 결과가 SLO나 primary 보호 기준을 만족하지 못할 때만 HA 도입과 failover를 검증합니다. |
 
 ## 테스트 전략
 
@@ -822,16 +854,17 @@ MySQL Testcontainers에 소량 데이터뿐 아니라 최근 168시간 주문이
 | 주문 멱등성 | 메뉴 순서가 다른 동일 요청 재현, 다른 요청 409, 응답 유실 후 재요청, 동시 중복 요청 한 번만 차감 |
 | 포인트 동시성 | 동일 사용자 충전·주문 100개, 서로 다른 사용자 병렬 처리, 잔액 음수 및 한도 초과 없음 |
 | DB 장애 처리 | 강제 데드락과 락 timeout 전체 트랜잭션 재시도, 재시도 소진 시 503 |
-| API 오류 계약 | malformed JSON 400, 미지원 Content-Type 415, `code`·`message`·`details`·`traceId`, 락 재시도 소진 503 |
+| API 오류 계약 | malformed JSON 400, 요청 검증의 `details.fieldErrors`, 미지원 Content-Type 415, 락 재시도 소진 503, 예상외 오류 500, body와 `X-Trace-Id` 일치 |
 | Outbox 원자성 | 주문 롤백 시 이벤트 없음, 주문 성공 시 정확히 하나 생성 |
 | Outbox 선점 | 게시자 두 개의 중복 선점 방지, worker 슬롯 이하 claim, lease 만료 회수, 이전 `claim_token`의 모든 상태 갱신 실패 |
-| 외부 전송 | 2xx 성공, timeout·5xx·408·425·429 재시도, `Retry-After`, terminal 4xx, 인증 오류 경보 |
+| 외부 전송 | 2xx 성공, 네트워크·timeout·5xx 최대 5회 재시도, 4xx 즉시 실패, HTTP 클라이언트 숨은 재시도 없음 |
 | 중복 소비 | 외부 수신 직후 게시자 종료를 재현하고 같은 `eventId` 재전송 시 Mock 데이터 한 번만 반영 |
-| Outbox 운영 | 6번째 claim 중단·6회 전송 실패 후 `FAILED`, redrive 성공, `PUBLISHED` 및 확인된 `FAILED` 정리와 신규 게시 간 충돌 없음 |
+| Outbox 장애 복구 | 6번째 시도 실패 후 `FAILED`, 게시자 종료 후 lease 회수, 늦은 게시자의 이전 claim 갱신 실패 |
 | 인기 메뉴 | 시작 경계 포함, 종료 경계 제외, 정확히 168시간, 수량 합계, 동률 menuId 정렬, 빈 결과 |
 | 시간 | 나노초가 있는 `Clock` 값의 마이크로초 절삭, UTC DB 값과 정확히 같은 `+09:00` API 문자열, 동일한 from/to |
 | 집계 타입 | MySQL `SUM(INT)`의 `DECIMAL` 결과를 범위 확인 후 `longValueExact()`로 변환 |
 | 실행계획 | 별도 성능 프로필의 30일 주문 100,000건·항목 300,000건에서 인기 메뉴 쿼리 계획과 인덱스 확인 |
+| 부하 기준 | k6로 목표 트래픽의 p95·오류율·RPS를 측정하고 DB CPU·pool·락 대기·Outbox queue age를 함께 기록하여 확장 판단 근거 작성 |
 
 실행계획에서는 `orders`가 `paid_at` 인덱스로 range 접근하고 `order_item`이 `order_id` 인덱스로 조인되는 것을 기대합니다. 옵티마이저 선택은 데이터 분포에 따라 달라질 수 있으므로 계획이 다르면 테스트를 무조건 실패시키기보다 실제 스캔 행 수와 원인을 기록하고 인덱스를 재검토합니다. CI 환경 편차가 큰 절대 실행 시간은 엄격한 합격 조건으로 사용하지 않습니다.
 
@@ -852,8 +885,10 @@ MySQL Testcontainers에 소량 데이터뿐 아니라 최근 168시간 주문이
 | 포인트 부족 | 409 | `INSUFFICIENT_POINTS` |
 | 같은 멱등 키의 다른 요청 | 409 | `IDEMPOTENCY_KEY_REUSED` |
 | DB 락 또는 데드락 재시도 소진 | 503 | `CONCURRENT_REQUEST_TIMEOUT` |
+| DB 연결·커넥션 풀 등 일시적 인프라 불가 | 503 | `SERVICE_UNAVAILABLE` |
+| 예상하지 못한 서버 오류 | 500 | `INTERNAL_SERVER_ERROR` |
 
-외부 플랫폼 전송 실패는 완료된 주문의 HTTP 응답이나 DB 상태를 롤백하지 않습니다.
+외부 플랫폼 전송 실패는 완료된 주문의 HTTP 응답이나 DB 상태를 롤백하지 않습니다. 현재 Redis를 사용하지 않으므로 Redis 과부하 오류 경로도 없습니다. 향후 조회 캐시를 도입하면 Redis 장애 시 primary 보호용 시간·동시성·용량 예산 안에서만 MySQL로 우회하고, 예산을 넘으면 인기 메뉴 조회에 `503 SERVICE_UNAVAILABLE`을 반환합니다.
 
 ## 다음 단계
 
