@@ -13,7 +13,7 @@
 - `S6-01` 메뉴 목록 조회 API 완료 (`DONE`, issue #3)
 - `S5-04` PR 검토와 명시적 병합 승인 규칙 문서화 완료 (`DONE`, issue #20)
 - `S6-02` 메뉴 UTC 시간 매핑과 README 구현 상태 정합성 보완 완료 (`DONE`, issue #22)
-- 후속 준비 작업: `S7-01` 포인트 충전 API 상세 구체화 (`BACKLOG`, issue #4)
+- 현재 작업: `S7-01` 포인트 충전 API 구현 (`IN_PROGRESS`, issue #4)
 
 ## 문서 기준
 
@@ -63,15 +63,15 @@
 
 ## 다음 행동
 
-issue #22가 `dev`에 병합된 상태를 확인한 뒤 issue #4의 요구사항과 README 포인트 충전 계약을 대조한다. `S7-01`의 정확한 대상 파일, 먼저 실패시킬 테스트와 검증 명령을 `docs/IMPLEMENTATION_PLAN.md`에 기록하고 사용자 승인을 받아 `READY`로 전환한다. 승인 전에는 구현 브랜치를 만들지 않는다.
+`PointChargeApiIntegrationTest`에 유효한 충전 요청 계약을 먼저 작성하고 아직 endpoint가 없어 `404 ENDPOINT_NOT_FOUND`로 실패하는 RED를 확인한다.
 
 ## 작업 재개 기준
 
-- 기준 브랜치: issue #22 병합 후 최신 `dev`
+- 기준 브랜치: `feature/issue-4-point-charge-api`
 - 원격 저장소: `https://github.com/usersy628/coffee-order-system.git`
 - GitHub 작업 이슈: #1~#12, #15, #17, #20, #22, 다음 준비 issue #4
 - 경량 구현 계획 기준 커밋: `999f04e docs: add lightweight implementation workflow`
 - 최신 설계 기준 커밋: `dd2a27c docs: simplify design after tutor feedback`
 - 승인된 기술 스택과 S5-02 준비 기준 커밋: `fe6d65b docs: approve technology stack and project structure (#1)`
-- 예상 작업 트리: issue #22 병합 직후에는 clean, `S7-01` 승인 전에는 issue #4 브랜치를 만들지 않음
+- 예상 작업 트리: 승인된 `S7-01` 상세 계획과 RED 테스트부터 작은 커밋으로 진행
 - 재개 시 `AGENTS.md`의 저장소 확인 명령으로 실제 상태를 다시 검증
