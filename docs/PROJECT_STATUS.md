@@ -8,7 +8,7 @@
 - `S7-01` 포인트 충전 API: `DONE`, issue #4 `CLOSED`, PR #24 `MERGED`
 - PR #24의 손상된 한글 본문을 UTF-8 `--body-file`로 복구했고 GitHub 원본에서 한글 제목과 예상하지 않은 리터럴 `?`가 없음을 확인함
 - `DOC-01` 구현 계획과 완료 이력 분리: `DONE`, issue #25 `CLOSED`, PR #26 `MERGED`, merge commit `14d8637`
-- `S8-01` 주문·포인트 결제·멱등성: `READY`, issue #5 `OPEN`, 브랜치 `feature/issue-5-order-payment-idempotency`
+- `S8-01` 주문·포인트 결제·멱등성: `IN_PROGRESS`, issue #5 `OPEN`, 브랜치 `feature/issue-5-order-payment-idempotency`
 
 ## 문서 기준
 
@@ -25,4 +25,4 @@
 
 ## 다음 행동
 
-`OrderApiIntegrationTest`를 작성하고 유효한 주문 요청이 `404 ENDPOINT_NOT_FOUND`로 실패하는 RED를 확인한다.
+주문 요청 DTO와 controller 골격을 추가하고 잘못된 items 입력이 `400 INVALID_ORDER_REQUEST`가 되는 계약 테스트를 작성한다.
