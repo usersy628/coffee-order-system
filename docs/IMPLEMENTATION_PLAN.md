@@ -96,7 +96,7 @@ S9-01과 S10-01은 모두 S8-01만 직접 선행하므로 서로 독립적으로
   - README에 Java 17·Docker 준비 조건, `.env.example` 복사, Compose 기동, `SPRING_PROFILES_ACTIVE=local` 실행, IntelliJ 환경 변수 입력, `/actuator/health` 확인, Flyway V2 초기 데이터, Testcontainers 전체 테스트와 `bootJar` 절차를 작성한다.
   - `MYSQL_PORT=3307`, `SERVER_PORT=18080` 같은 개인 로컬 오버라이드는 지원하되 저장소 기본값이나 애플리케이션 설정을 개인 포트로 바꾸지 않는다.
   - 실제 Controller·DTO와 V2 초기 데이터에 맞춘 `curl.exe` 메뉴 조회·포인트 충전·주문·인기 메뉴 예시와 멱등 키 재사용 주의사항을 작성한다.
-  - README의 구현 현황·다음 단계에서 이미 끝난 S11·S12를 최신 기록 경로와 남은 S13~S15 순서에 맞게 정리한다.
+  - README의 구현 현황·다음 단계에서 이미 끝난 S11·S12를 최신 기록 경로와 남은 S14~S15 순서에 맞게 정리한다.
 - 제외 범위:
   - Java·Spring·DB schema·migration·API 계약·CI·성능 전용 Compose의 동작 변경
   - 운영용 비밀번호·외부 데이터 플랫폼 URL·개인 IntelliJ 설정의 저장
