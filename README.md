@@ -1166,5 +1166,4 @@ S11의 격리된 local 기준선 실행 순서와 결과 양식은 [`docs/perfor
 
 Spring Boot 기본 구조, MySQL Testcontainers 기반, 메뉴 목록, 포인트 충전, 주문·결제, 트랜잭션 내 Outbox 저장, 인기 메뉴 TOP 3와 전역 오류·traceId 계약의 구현 근거는 제출 기록과 테스트에 남아 있습니다. 구현 중 실제로 확인한 문제·선택·한계는 [TIL 트러블슈팅](docs/TIL_TROUBLESHOOTING.md)에 정리합니다. S11의 기능 간 MySQL 회귀·부하 기준선·실행계획 근거는 [S11_BASELINE.md](docs/performance/S11_BASELINE.md)와 제출 기록에서 확인합니다. 아래 목록은 남은 고수준 마일스톤입니다.
 
-1. [TIL 트러블슈팅 문서](docs/TIL_TROUBLESHOOTING.md) 정리
-2. 전체 테스트·보안정보·공개 저장소 제출 검증
+1. 전체 테스트·보안정보·공개 저장소 제출 검증
