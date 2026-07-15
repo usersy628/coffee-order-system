@@ -47,7 +47,7 @@ READY가 아닌 작업은 구현하지 않는다. RECORDED는 완료 판정이 �
 | ID | 상태 | 선행 작업 | 결과물 | 독립 완료 신호 |
 | --- | --- | --- | --- | --- |
 | [DOC-01](https://github.com/usersy628/coffee-order-system/issues/25) | DONE | PR #24 병합 | 활성 계획과 완료 이력 분리, 인수인계와 PR 본문 규칙 정합성 보완 | 문서 역할·링크·상태가 일치하고 PR 본문 UTF-8 검증 성공 |
-| [DOC-02](https://github.com/usersy628/coffee-order-system/issues/31) | IN_PROGRESS | S11 제출 결과 확인 | PR lifecycle과 문서 상태 기준 분리, 불변 제출 기록 도입 | 리뷰어가 Plan·Records·GitHub의 역할을 혼동하지 않고 PR 제출 기록을 검증 가능 |
+| [DOC-02](https://github.com/usersy628/coffee-order-system/issues/31) | RECORDED | S11 제출 결과 확인 | PR lifecycle과 문서 상태 기준 분리, 불변 제출 기록 도입 | [IMPLEMENTATION_RECORDS.md](IMPLEMENTATION_RECORDS.md)의 제출 기록과 연결 PR에서 검증 |
 | [S5-01](https://github.com/usersy628/coffee-order-system/issues/1) | DONE | 4단계 설계 완료 | 기술 스택·패키지 구조·설정 및 테스트 구성 추천안과 승인 | 선택 사항이 문서화되고 사용자가 승인함 |
 | [S5-02](https://github.com/usersy628/coffee-order-system/issues/2) | DONE | S5-01 | Spring Boot·빌드 도구 기본 구조, traceId·공통 오류 기반과 MySQL Testcontainers 환경 | 기본 컨텍스트·공통 예외 smoke test·MySQL smoke 테스트와 빌드 성공 |
 | [S5-03](https://github.com/usersy628/coffee-order-system/issues/17) | DONE | S5-02 | 리뷰 후속 공통 MVC 오류·Flyway 재실행 검증·PR CI 기반 보완 | 4xx 계약·migration 재실행·GitHub Actions 검증 성공 |
@@ -68,51 +68,7 @@ S9-01과 S10-01은 모두 S8-01만 직접 선행하므로 서로 독립적으로
 
 ## 준비·진행 중인 작업 상세
 
-현재 IN_PROGRESS 작업은 DOC-02 하나다. S11-01의 계획·구현·검증 상세는 [IMPLEMENTATION_RECORDS.md](IMPLEMENTATION_RECORDS.md)에 보존한다.
-
-### [DOC-02](https://github.com/usersy628/coffee-order-system/issues/31) PR lifecycle와 문서 상태의 기준 분리
-
-- 상태: IN_PROGRESS
-- 목적: 리뷰어와 후속 작업자가 Plan의 준비 상태, Records의 제출 스냅샷, GitHub의 라이브 상태를 서로 다른 것으로 읽도록 문서 구조와 PR 흐름을 분리한다.
-- 요구사항 근거:
-  - [AGENTS.md](../AGENTS.md)의 이슈 우선·PR 검토·명시적 병합 승인 규칙
-  - [README.md](../README.md)의 구현 순서와 검증 기준
-  - S11 PR 제출 후 저장소 문서가 IN_PROGRESS로 남고 GitHub 이슈가 자동 종료되어 발생한 상태 불일치
-- 선행 작업: S11 제출 결과와 origin/dev 기준 커밋 f8d7489를 확인하고, DOC-02 이슈를 먼저 생성한다.
-- 작업 브랜치: feature/issue-31-pr-lifecycle-docs
-- 대상 파일:
-  - AGENTS.md
-  - .github/pull_request_template.md
-  - README.md
-  - docs/IMPLEMENTATION_PLAN.md
-  - docs/IMPLEMENTATION_RECORDS.md
-  - docs/IMPLEMENTATION_HISTORY.md
-  - docs/PROJECT_STATUS.md
-- 먼저 수행할 테스트 또는 검증:
-  1. S11 Plan 행과 Project Status의 정적 상태가 PR #30 병합 후에도 최신 GitHub 상태와 다름을 확인한다.
-  2. 새 규칙이 Refs로 제출을 시작하고, 명시적 병합 승인 직전에만 Closes로 바뀌도록 검토한다.
-  3. 문서 변경 뒤 링크·상태 용어·UTF-8 리터럴 ? 손실과 공백 오류를 확인한다.
-- 구현 범위:
-  - Plan에는 첫 PR 제출 전 작업의 전체 상세만 두고, PR URL 뒤에는 Records로 옮기는 RECORDED 상태를 도입한다.
-  - Records에는 계획 전체, 실제 구현 결과와 검증 결과를 불변으로 기록하고, 현재 issue·PR·CI·병합 상태는 기록하지 않는다.
-  - Project Status를 현재 작업과 다음 행동만 담는 짧은 인수인계로 바꾸고 GitHub 링크를 라이브 상태의 단일 확인 경로로 명시한다.
-  - AGENTS와 PR 템플릿에 Refs에서 Closes로 바꾸는 시점, UTF-8 body-file 검증, 제출 기록 작성 순서를 명시한다.
-  - S11을 첫 PR_SUBMISSION 기록으로 옮겨 새 읽기 경로를 실제 예시로 검증한다.
-  - README에는 제품 정책을 바꾸지 않고 구현 문서의 읽는 순서와 남은 고수준 단계만 정리한다.
-- 제외 범위:
-  - Java·Gradle·DB 스키마·성능 결과·S11 구현 내용 변경
-  - GitHub Actions, 자동 병합, 봇 또는 외부 동기화 도입
-  - DOC-02 이전 History 항목을 현재 GitHub 상태에 맞춰 일괄 재작성
-- 완료 조건:
-  - 새 작업이 제출되면 Plan 상세가 Records로 이동하고 RECORDED만 남는 절차가 모든 관련 문서에 일관되게 설명된다.
-  - 정적 기록에 현재 PR/issue 상태, CI 실행 시간 또는 merge commit을 넣지 않고 GitHub 링크에서 확인하도록 명시된다.
-  - S11 제출 기록이 계획·실제 결과·검증 근거를 보존하며 라이브 상태 표기를 포함하지 않는다.
-  - PR 템플릿과 AGENTS가 첫 제출 Refs, 승인 직전 Closes, UTF-8 body-file 검증을 같은 순서로 안내한다.
-- 검증 명령:
-
-    git diff --check
-    rg -n "RECORDED|PR_SUBMISSION|Refs #|Closes #|라이브 상태" AGENTS.md .github/pull_request_template.md docs README.md
-    gh issue view 31 --json number,state,url,title
+현재 IN_PROGRESS 작업은 없다. DOC-02와 S11-01의 계획·구현·검증 상세는 [IMPLEMENTATION_RECORDS.md](IMPLEMENTATION_RECORDS.md)에 보존한다. 다음 기능 작업을 시작하기 전에는 연결한 GitHub PR의 라이브 상태를 확인한다.
 
 ## 작업 상세 템플릿
 

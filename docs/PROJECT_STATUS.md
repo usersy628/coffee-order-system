@@ -6,11 +6,11 @@
 
 ## 현재 작업
 
-- 기준 개발선: origin/dev의 f8d7489
-- 작업: [DOC-02](https://github.com/usersy628/coffee-order-system/issues/31) PR lifecycle와 문서 상태의 기준 분리
-- 작업 브랜치: feature/issue-31-pr-lifecycle-docs
-- 직전 제출 기록: [S11-01](IMPLEMENTATION_RECORDS.md)의 계획·실제 검증·부하 기준선 근거
+- 현재 Plan의 IN_PROGRESS 작업: 없음
+- 최근 제출 기록: [DOC-02](IMPLEMENTATION_RECORDS.md) PR lifecycle와 문서 상태의 기준 분리
+- 검토 링크: [PR #32](https://github.com/usersy628/coffee-order-system/pull/32)
+- 직전 기능 제출 기록: [S11-01](IMPLEMENTATION_RECORDS.md)의 계획·실제 검증·부하 기준선 근거
 
 ## 다음 행동
 
-DOC-02 문서의 링크·용어·UTF-8 손실과 git diff --check를 검증한 뒤, Refs #31 본문으로 dev 대상 PR을 만든다.
+PR #32의 GitHub checks와 별도 검토 결과를 확인한다. 검토가 끝나고 사용자가 명시적으로 병합을 승인한 경우에만 UTF-8 본문 파일로 Refs #31을 Closes #31으로 바꿔 검증한 뒤 병합한다.
