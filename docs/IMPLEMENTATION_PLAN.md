@@ -107,6 +107,25 @@ S9-01과 S10-01은 모두 S8-01만 직접 선행하므로 서로 독립적으로
     $files = @('docs/IMPLEMENTATION_PLAN.md', 'docs/PROJECT_STATUS.md', 'docs/IMPLEMENTATION_RECORDS.md'); foreach ($file in $files) { $content = Get-Content -Raw -Encoding UTF8 $file; $parent = Split-Path $file -Parent; foreach ($match in [regex]::Matches($content, '\[[^\]]+\]\((?!https?://|#)([^)#]+)(?:#[^)]+)?\)')) { if (-not (Test-Path -LiteralPath (Join-Path $parent $match.Groups[1].Value))) { throw "Broken relative link: $file -> $($match.Groups[1].Value)" } } }
     git diff --check
 
+#### 실제 구현 결과
+
+- S15의 연결 PR과 issue를 GitHub에서 확인해 Project Status의 이전 검토·병합 대기 안내가 현재 인수인계와 맞지 않음을 확인했다.
+- Project Status를 DOC-03 작업 기준으로 갱신해 현재 작업, 최근 제출 기록, 이슈 링크와 다음 PR 준비 행동만 짧게 남겼다.
+- S15와 이전 작업의 PR_SUBMISSION 기록, README의 요구사항·설계와 구현·설정은 수정하지 않았다.
+
+#### 계획 대비 변경
+
+- 없음
+
+#### 실제 검증 결과
+
+| 검증 명령 또는 확인 | 결과 |
+| --- | --- |
+| PR #36과 issue #12 GitHub 조회 | 성공. Project Status의 이전 다음 행동과의 불일치를 확인 |
+| README 다음 단계와 Plan 작업 목록 대조 | 성공. 새 기능·설계 작업 없이 DOC-03만 진행 상태임을 확인 |
+| Project Status·Plan·Records 상대 링크 검사 | 성공 |
+| `git diff --check` | 성공 |
+
 ## 작업 상세 템플릿
 
 다음 작업을 READY로 바꿀 때 아래 형식을 복사해 구체화한다.
