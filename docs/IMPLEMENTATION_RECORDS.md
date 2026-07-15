@@ -11,6 +11,71 @@
 
 ## PR 제출 기록
 
+### [DOC-03](https://github.com/usersy628/coffee-order-system/issues/37) S15 병합 뒤 최종 인수인계 상태를 정리한다
+
+- 기록 유형: PR_SUBMISSION
+- 기록일: 2026-07-15
+- 제출 브랜치: feature/issue-37-final-handoff-status
+- 연결:
+  - 이슈: [#37](https://github.com/usersy628/coffee-order-system/issues/37)
+  - PR: [#38](https://github.com/usersy628/coffee-order-system/pull/38)
+  - 준비 계획 커밋: e8072c6
+  - 구현·검증 커밋: 1b5648b
+
+- 목적: S15-01 제출 PR의 병합 뒤에도 남아 있는 검토·병합 대기 인수인계를 현재 저장소의 다음 작업 기준과 일치시키되, GitHub 라이브 상태를 정적 문서에 복사하지 않는다.
+- 요구사항 근거:
+  - [AGENTS.md의 상태 인수인계 규칙](../AGENTS.md#상태-인수인계)
+  - [README.md의 다음 단계](../README.md#다음-단계)
+  - [issue #37](https://github.com/usersy628/coffee-order-system/issues/37)
+- 선행 작업: S15-01 제출 기록과 [PR #36](https://github.com/usersy628/coffee-order-system/pull/36)의 GitHub 상태를 확인한다.
+- 작업 브랜치: feature/issue-37-final-handoff-status
+- 대상 파일:
+  - docs/IMPLEMENTATION_PLAN.md
+  - docs/PROJECT_STATUS.md
+  - docs/IMPLEMENTATION_RECORDS.md (PR URL 생성 뒤 PR_SUBMISSION 기록 이관 시)
+- 먼저 수행한 테스트 또는 검증:
+  1. [PR #36](https://github.com/usersy628/coffee-order-system/pull/36)과 [issue #12](https://github.com/usersy628/coffee-order-system/issues/12)의 GitHub 상태를 확인하고, Project Status의 다음 행동과 불일치하는지 대조했다.
+  2. README의 다음 단계와 Plan의 READY·IN_PROGRESS 작업을 읽어 새 기능 또는 설계 작업이 남아 있지 않은지 확인했다.
+  3. Project Status와 Records의 링크가 저장소 안에서 해석되고, S15 PR_SUBMISSION 스냅샷을 수정하지 않는지 확인했다.
+- 구현 범위:
+  - Project Status를 현재 Plan 작업 없음, 최근 DOC-03 제출 기록과 S15 연결 PR, 새 요구사항 발생 시 이슈 우선·README 기준 Plan READY 준비라는 한 가지 다음 행동으로 짧게 갱신한다.
+  - PR URL 생성 뒤 이 상세와 실제 결과·계획 대비 변경·검증 결과를 Records로 이관한다.
+- 제외 범위:
+  - S15 또는 이전 PR_SUBMISSION 기록의 GitHub 상태·merge commit·CI 결과를 맞추기 위한 수정
+  - README의 제품 요구사항·ERD·API 계약·구현 또는 설정 변경
+  - 새 기능, 새 설계 또는 사용자가 정하지 않은 후속 마일스톤 생성
+- 완료 조건:
+  - Project Status가 현재 작업 없음, 최근 DOC-03 제출 기록과 S15 연결 PR, 새 요구사항을 이슈 우선으로 시작하는 한 가지 다음 행동만 담는다.
+  - 정적 문서가 PR·issue의 열린/닫힌 상태, CI 실행 시간 또는 merge commit을 복사하지 않는다.
+  - 상대 링크 검사와 `git diff --check`가 성공한다.
+- 검증 명령:
+
+    git status --short --branch
+    gh pr view 36 --repo usersy628/coffee-order-system --json state,mergedAt,url
+    gh issue view 12 --repo usersy628/coffee-order-system --json state,closedAt,url
+    $files = @('docs/IMPLEMENTATION_PLAN.md', 'docs/PROJECT_STATUS.md', 'docs/IMPLEMENTATION_RECORDS.md'); foreach ($file in $files) { $content = Get-Content -Raw -Encoding UTF8 $file; $parent = Split-Path $file -Parent; foreach ($match in [regex]::Matches($content, '\[[^\]]+\]\((?!https?://|#)([^)#]+)(?:#[^)]+)?\)')) { if (-not (Test-Path -LiteralPath (Join-Path $parent $match.Groups[1].Value))) { throw "Broken relative link: $file -> $($match.Groups[1].Value)" } } }
+    git diff --check
+
+#### 실제 구현 결과
+
+- S15의 연결 PR과 issue를 GitHub에서 확인해 Project Status의 이전 검토·병합 대기 안내가 현재 인수인계와 맞지 않음을 확인했다.
+- Project Status를 현재 Plan 작업 없음, 최근 DOC-03 제출 기록, S15 연결 PR과 새 요구사항의 이슈 우선 시작 절차만 담는 최종 인수인계로 갱신했다.
+- S15와 이전 작업의 PR_SUBMISSION 기록, README의 요구사항·설계와 구현·설정은 수정하지 않았다.
+
+#### 계획 대비 변경
+
+- 없음
+
+#### 실제 검증 결과
+
+| 검증 명령 또는 확인 | 결과 |
+| --- | --- |
+| PR #36과 issue #12 GitHub 조회 | 성공. Project Status의 이전 다음 행동과의 불일치를 확인 |
+| README 다음 단계와 Plan 작업 목록 대조 | 성공. 새 기능·설계 작업 없이 DOC-03만 진행 상태임을 확인 |
+| Project Status·Plan·Records 상대 링크 검사 | 성공 |
+| `git diff --check` | 성공 |
+| PR #38 생성 뒤 제목·본문 원문 확인 | 한글과 `Refs #37` 보존, template 순서와 제출 상세 확인 |
+
 ### [S15-01](https://github.com/usersy628/coffee-order-system/issues/12) 전체 테스트·보안정보·공개 저장소 제출 상태를 검증한다
 
 - 기록 유형: PR_SUBMISSION

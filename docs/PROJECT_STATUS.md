@@ -7,10 +7,10 @@
 ## 현재 작업
 
 - 현재 Plan의 IN_PROGRESS 작업: 없음
-- 최근 제출 기록: [S15-01](IMPLEMENTATION_RECORDS.md) 전체 테스트·보안정보·공개 저장소 제출 검증
-- 검토 링크: [PR #36](https://github.com/usersy628/coffee-order-system/pull/36)
-- 이전 제출 기록: [S14-01](IMPLEMENTATION_RECORDS.md) 구현 과정의 TIL 트러블슈팅
+- 최근 제출 기록: [DOC-03](IMPLEMENTATION_RECORDS.md) S15 병합 뒤 최종 인수인계 상태 정리
+- 완료 단계 링크: [S15-01 PR #36](https://github.com/usersy628/coffee-order-system/pull/36)
+- 이전 제출 기록: [S15-01](IMPLEMENTATION_RECORDS.md) 전체 테스트·보안정보·공개 저장소 제출 검증
 
 ## 다음 행동
 
-[PR #36](https://github.com/usersy628/coffee-order-system/pull/36)의 GitHub Checks와 별도 검토를 확인한다. 검토 완료와 사용자의 명시적 병합 승인이 모두 있으면 UTF-8 본문 파일로 `Refs #12`를 `Closes #12`로 바꾸고 원문을 검증한 뒤 병합한다.
+새 요구사항 또는 설계 변경이 생기면 README를 단일 기준으로 확인하고 GitHub 이슈를 먼저 만든 뒤, 최신 `dev`에서 Plan을 READY로 구체화한다.
