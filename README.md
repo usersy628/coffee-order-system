@@ -2,7 +2,7 @@
 
 다중 서버 환경에서 동시성, 데이터 일관성, 장애 복구를 고려하는 커피 주문 시스템 과제입니다.
 
-요구사항 분석, ERD, API 명세, 동시성·트랜잭션·Outbox 상세 전략과 기술 스택 승인을 완료했고, Spring Boot 기본 구조와 MySQL 8.4.10 통합 테스트 기반, 메뉴 목록, 포인트 충전, 주문·결제, 트랜잭션 내 `PENDING` Outbox 저장, Outbox 게시자와 Mock 데이터 플랫폼, 최근 168시간 인기 메뉴 TOP 3 조회까지 구현했습니다. 다음 작업은 기능 간 MySQL 회귀와 부하 기준 검증입니다.
+요구사항 분석, ERD, API 명세, 동시성·트랜잭션·Outbox 상세 전략과 기술 스택 승인을 완료했고, Spring Boot 기본 구조와 MySQL 8.4.10 통합 테스트 기반, 메뉴 목록, 포인트 충전, 주문·결제, 트랜잭션 내 `PENDING` Outbox 저장, Outbox 게시자와 Mock 데이터 플랫폼, 최근 168시간 인기 메뉴 TOP 3 조회, 전역 오류·traceId 계약 보강까지 구현했습니다. 기능 간 MySQL 회귀·부하 기준선과 각 구현의 근거는 제출 기록과 [S11 기준선](docs/performance/S11_BASELINE.md)에 보존합니다.
 
 ## 설계 목표와 의도
 
@@ -130,6 +130,126 @@ Spring proxy를 우회하는 self-invocation을 막기 위해 충전과 주문�
 - 단위 테스트는 시간·해시·금액 같은 순수 규칙, MVC slice는 API 계약, MySQL Testcontainers 통합 테스트는 FK·CHECK·락·트랜잭션과 native query에 집중합니다. 핵심 통합 테스트는 Docker가 없다고 건너뛰지 않고 실행 환경 문제를 드러냅니다.
 
 외부 데이터 플랫폼 adapter는 Apache HttpClient 5 classic을 사용하고 HTTP client 내부 자동 재시도를 끕니다. connection pool 대기, DNS·TLS·connect와 read를 포함한 시도당 5초 전체 예산은 구성값과 외부 watchdog으로 제한합니다. deadline이 지나면 `HttpPost.cancel()`로 실제 요청 취소를 시도하고, deadline worker는 대기열 없는 최대 동시성 수만큼만 두어 멈추지 않는 I/O가 새 이벤트를 무한히 쌓지 못하게 합니다. WireMock 실제 소켓 테스트에서 경과 시간과 호출 횟수를 검증합니다. 재시도 횟수와 백오프의 유일한 소유자는 계속 Outbox입니다.
+
+## 실행 가이드
+
+### 준비 조건
+
+- Java 17과 저장소의 Gradle Wrapper를 사용합니다. 시스템 Gradle을 별도로 설치할 필요가 없습니다.
+- 아래 Compose 경로와 전체 테스트에는 Docker Desktop 또는 Docker Engine이 실행 중이어야 합니다. 이미 호환되는 MySQL을 직접 실행 중이면 Docker 없이 `local` 앱을 기동할 수 있지만, 전체 테스트는 Testcontainers의 별도 MySQL 컨테이너를 사용하므로 Docker가 필요합니다.
+- 성능 기준선은 이 가이드와 분리합니다. `local,perf` 프로필, `docker-compose.performance.yml`, `PERF_MYSQL_*` 환경 변수와 포트 3308/18081은 [S11 기준선 문서](docs/performance/S11_BASELINE.md)를 따릅니다.
+
+### 일반 로컬 MySQL 시작
+
+프로젝트 루트에서 개발용 환경 파일을 만들고 MySQL을 시작합니다. `.env`는 Git에서 무시되며 운영 비밀번호를 넣는 파일이 아닙니다.
+
+```powershell
+Copy-Item .env.example .env
+docker compose --env-file .env -f compose.yaml config
+docker compose --env-file .env -f compose.yaml up -d --wait
+```
+
+기본값은 `127.0.0.1:3306`, 데이터베이스 `coffee_order`, 사용자 `coffee`입니다. Compose를 다른 빈 포트로 열려면 `.env`의 `MYSQL_PORT`만 바꿉니다. 예를 들어 다른 개발용 컨테이너와 충돌하지 않게 3307을 사용할 수 있습니다.
+
+```text
+MYSQL_PORT=3307
+```
+
+Compose는 해당 포트를 loopback에만 열고 MySQL 8.4.10, UTC, healthcheck와 named volume을 사용합니다. 첫 애플리케이션 실행 때 Flyway가 스키마와 과제용 초기 데이터를 적용합니다. 초기 데이터는 사용자 1~3의 0P 지갑, 판매 중인 메뉴 1 아메리카노(4,500P)·2 카페라테(5,000P), 판매 중지 메뉴 3입니다.
+
+중지하되 개발 DB를 보존하려면 `docker compose -f compose.yaml down`을 사용합니다. `down -v`는 named volume의 로컬 데이터를 지우므로 새 초기화가 필요할 때만 사용합니다.
+
+### 이미 실행 중인 로컬 MySQL 사용
+
+이미 3307처럼 별도 포트에서 MySQL을 실행 중이면 Compose를 다시 시작하지 않습니다. `MYSQL_DATABASE`가 존재하고 해당 사용자에게 schema·table 생성 권한이 있어야 Flyway가 V1~V3을 적용할 수 있습니다. 예를 들어 로컬 MySQL 관리자 계정으로 다음처럼 과제용 DB와 사용자만 만듭니다. 실제 로컬 비밀번호는 저장소에 적지 않고, 아래 placeholder를 자신의 개발용 값으로 바꿉니다.
+
+```sql
+CREATE DATABASE IF NOT EXISTS coffee_order
+  CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;
+CREATE USER IF NOT EXISTS 'coffee'@'localhost' IDENTIFIED BY 'local-only-password';
+GRANT ALL PRIVILEGES ON coffee_order.* TO 'coffee'@'localhost';
+FLUSH PRIVILEGES;
+```
+
+그 뒤 앱 환경 변수의 `MYSQL_PORT`, `MYSQL_DATABASE`, `MYSQL_USER`, `MYSQL_PASSWORD`를 실제 서버 값과 맞춥니다. 예를 들어 기존 MySQL이 3307이면 아래 애플리케이션 실행 예시의 `MYSQL_PORT=3307`을 사용합니다.
+
+### 애플리케이션 실행
+
+`application-local.yml`은 프로세스 환경 변수로 로컬 MySQL에 연결합니다. Docker Compose의 `.env`는 Gradle이나 IntelliJ에 자동 전달되지 않으므로, 앱을 시작할 때 같은 `MYSQL_*` 값을 설정합니다.
+
+기본 Compose 값을 쓰는 PowerShell 예시는 다음과 같습니다.
+
+```powershell
+$env:SPRING_PROFILES_ACTIVE = 'local'
+$env:MYSQL_PORT = '3306'
+$env:MYSQL_DATABASE = 'coffee_order'
+$env:MYSQL_USER = 'coffee'
+$env:MYSQL_PASSWORD = 'coffee-local'
+$env:SERVER_PORT = '8080'
+.\gradlew.bat bootRun
+```
+
+3307 MySQL과 18080 서버를 쓰려면 `.env`의 `MYSQL_PORT=3307`과 아래 앱 환경 변수를 같은 값으로 맞춥니다. `SERVER_PORT`는 Spring Boot 표준 환경 변수이므로 별도 설정 파일 변경 없이 적용됩니다.
+
+```powershell
+$env:SPRING_PROFILES_ACTIVE = 'local'
+$env:MYSQL_PORT = '3307'
+$env:MYSQL_DATABASE = 'coffee_order'
+$env:MYSQL_USER = 'coffee'
+$env:MYSQL_PASSWORD = 'coffee-local'
+$env:SERVER_PORT = '18080'
+.\gradlew.bat bootRun
+```
+
+IntelliJ IDEA에서는 Run/Debug Configuration의 Environment variables에 같은 값을 넣고 `SPRING_PROFILES_ACTIVE=local`을 설정합니다. Gradle JVM도 Java 17을 선택합니다. `local` 프로필은 과제용 Mock 데이터 플랫폼 게시자를 같은 서버의 loopback 주소로 켜므로, 실제 외부 플랫폼 URL을 추가할 필요가 없습니다.
+
+앱이 시작되면 선택한 포트로 health와 초기 메뉴를 확인합니다.
+
+```powershell
+curl.exe --fail http://127.0.0.1:18080/actuator/health
+curl.exe --fail http://127.0.0.1:18080/api/menus
+```
+
+18080 대신 기본 포트를 사용했다면 URL의 포트도 8080으로 바꿉니다. health 응답은 `{"status":"UP"}`이고, 메뉴 목록에는 판매 상태를 포함한 메뉴 1~3이 반환됩니다.
+
+### API 빠른 확인
+
+아래 예시는 18080을 쓴 경우입니다. 상태를 바꾸는 요청에는 매번 새 UUID를 사용하고, 네트워크 재시도일 때만 같은 `Idempotency-Key`와 같은 본문을 재사용합니다. PowerShell에서는 JSON을 native `curl.exe`의 인자가 아니라 표준입력으로 넘겨 따옴표가 손실되지 않게 합니다. `--data-binary '@-'`의 작은따옴표는 PowerShell이 `@`를 별도 문법으로 해석하지 않게 합니다.
+
+```powershell
+$baseUrl = 'http://127.0.0.1:18080'
+
+curl.exe --fail "$baseUrl/api/menus"
+
+$chargeKey = [guid]::NewGuid().ToString()
+$chargeBody = '{"amount":10000}'
+$chargeBody | curl.exe -i --fail-with-body -X POST "$baseUrl/api/users/1/points/charges" `
+  -H 'Content-Type: application/json' `
+  -H "Idempotency-Key: $chargeKey" `
+  --data-binary '@-'
+
+$orderKey = [guid]::NewGuid().ToString()
+$orderBody = '{"items":[{"menuId":1,"quantity":1},{"menuId":2,"quantity":1}]}'
+$orderBody | curl.exe -i --fail-with-body -X POST "$baseUrl/api/users/1/orders" `
+  -H 'Content-Type: application/json' `
+  -H "Idempotency-Key: $orderKey" `
+  --data-binary '@-'
+
+curl.exe --fail "$baseUrl/api/menus/popular"
+```
+
+충전 성공은 `200 OK`와 `chargedAmount`, `balance`, `chargedAt`을, 최초 주문 성공은 `201 Created`와 정렬된 `items`, `totalAmount`, `balanceAfter`, `paidAt`을 반환합니다. 같은 키·같은 본문을 다시 보내면 결제나 충전은 한 번만 반영되고 `Idempotency-Replayed: true` 응답으로 기존 결과를 돌려줍니다. 자세한 요청·응답 필드와 오류 코드는 아래 [API 명세](#api-명세)와 [주요 오류 정책](#주요-오류-정책)을 기준으로 합니다.
+
+### 테스트와 패키징
+
+전체 테스트는 `application-test.yml`과 Testcontainers를 사용해 별도 MySQL 컨테이너를 시작합니다. 따라서 위 일반 로컬 DB나 포트를 사용하지 않지만 Docker가 실행 중이어야 합니다.
+
+```powershell
+.\gradlew.bat test --no-daemon --rerun-tasks
+.\gradlew.bat bootJar --no-daemon
+```
+
+테스트 실패가 Docker 연결 문제를 말하면 먼저 Docker Engine이 실행 중인지 확인합니다. 성능용 대규모 fixture와 k6는 일반 `test`에 포함하지 않으므로, 필요할 때만 [S11 기준선 문서](docs/performance/S11_BASELINE.md)의 `performanceTest` 절차를 따릅니다.
 
 ## 핵심 정책
 
@@ -1044,9 +1164,7 @@ S11의 격리된 local 기준선 실행 순서와 결과 양식은 [`docs/perfor
 
 구현 작업의 상태, 선행 관계, 대상 파일과 첫 PR 제출 전 상세는 [docs/IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md)에서 관리합니다. PR 제출 당시의 계획·구현·검증 근거는 [docs/IMPLEMENTATION_RECORDS.md](docs/IMPLEMENTATION_RECORDS.md)에 불변 기록으로 보존하고, DOC-02 이전 이력은 [docs/IMPLEMENTATION_HISTORY.md](docs/IMPLEMENTATION_HISTORY.md)에서만 참고합니다. issue·PR·CI·병합의 현재 상태는 각 GitHub 링크가 기준입니다. 요구사항·ERD·API 계약과 기술적 결정의 단일 기준은 계속 README.md입니다.
 
-Spring Boot 기본 구조, MySQL Testcontainers 기반, 메뉴 목록, 포인트 충전, 주문·결제, 트랜잭션 내 Outbox 저장과 인기 메뉴 TOP 3 조회의 구현 근거는 제출 기록과 테스트에 남아 있습니다. S11의 기능 간 MySQL 회귀·부하 기준선·실행계획 근거는 [S11_BASELINE.md](docs/performance/S11_BASELINE.md)와 제출 기록에서 확인합니다. 아래 목록은 남은 고수준 마일스톤입니다.
+Spring Boot 기본 구조, MySQL Testcontainers 기반, 메뉴 목록, 포인트 충전, 주문·결제, 트랜잭션 내 Outbox 저장, 인기 메뉴 TOP 3와 전역 오류·traceId 계약의 구현 근거는 제출 기록과 테스트에 남아 있습니다. S11의 기능 간 MySQL 회귀·부하 기준선·실행계획 근거는 [S11_BASELINE.md](docs/performance/S11_BASELINE.md)와 제출 기록에서 확인합니다. 아래 목록은 남은 고수준 마일스톤입니다.
 
-1. 전역 예외 매핑·traceId·로그와 API 계약 정합성 최종 보강
-2. README 실행 방법과 구현 근거 보강
-3. TIL 트러블슈팅 문서 정리
-4. 전체 테스트·보안정보·공개 저장소 제출 검증
+1. TIL 트러블슈팅 문서 정리
+2. 전체 테스트·보안정보·공개 저장소 제출 검증

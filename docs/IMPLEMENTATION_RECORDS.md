@@ -11,6 +11,84 @@
 
 ## PR 제출 기록
 
+### [S13-01](https://github.com/usersy628/coffee-order-system/issues/10) README 실행 방법과 구현 근거를 완성한다
+
+- 기록 유형: PR_SUBMISSION
+- 기록일: 2026-07-15
+- 제출 브랜치: feature/issue-10-readme-runbook
+- 연결:
+  - 이슈: [#10](https://github.com/usersy628/coffee-order-system/issues/10)
+  - PR: [#34](https://github.com/usersy628/coffee-order-system/pull/34)
+  - 준비 계획 커밋: 2af6b0a
+  - 구현 커밋: 3313265
+  - 계획 정렬 커밋: 172eded
+- 목적: 처음 받은 개발자가 README만으로 일반 로컬 MySQL, Spring Boot `local` 프로필, Testcontainers 테스트와 과제용 API 예시를 실제 구현과 같은 방식으로 실행·검증하게 한다.
+- 요구사항 근거:
+  - [README.md의 런타임과 빌드 도구](../README.md#런타임과-빌드-도구)
+  - [README.md의 설정, 초기 데이터와 테스트 구성](../README.md#설정-초기-데이터와-테스트-구성)
+  - [README.md의 API 명세](../README.md#api-명세)
+  - [README.md의 테스트 전략](../README.md#테스트-전략)
+  - [issue #10](https://github.com/usersy628/coffee-order-system/issues/10)
+- 선행 작업: S12-01의 오류·traceId 계약과 PR #33의 제출 기록을 반영한 최신 `origin/dev`를 기준으로 한다.
+- 작업 브랜치: feature/issue-10-readme-runbook
+- 대상 파일:
+  - README.md
+  - .env.example
+  - docs/IMPLEMENTATION_PLAN.md
+  - docs/PROJECT_STATUS.md
+- 먼저 수행한 검증:
+  1. 일반 로컬 `compose.yaml`, `.env.example`, `application-local.yml`의 MySQL image·환경 변수·loopback port가 같은 계약인지 확인했다.
+  2. `application-local.yml`, `application-test.yml`, Flyway V2 초기 데이터와 Controller·DTO를 읽어 환경 변수, 초기 사용자·메뉴, API 예시가 실제 값과 같은지 확인했다.
+  3. 성능 전용 `docker-compose.performance.yml`의 별도 DB·포트·비밀값 규칙을 확인해 일반 로컬 실행 절차와 섞이지 않게 했다.
+- 구현 범위:
+  - 기존 일반 개발용 MySQL 8.4.10 `compose.yaml`의 데이터베이스·사용자·비밀번호·host port 환경 변수, loopback 바인딩·UTC·healthcheck·named volume을 README에 정확히 설명했다.
+  - README에 Java 17·Docker 준비 조건, `.env.example` 복사, Compose 기동, `SPRING_PROFILES_ACTIVE=local` 실행, IntelliJ 환경 변수 입력, `/actuator/health` 확인, Flyway V2 초기 데이터, Testcontainers 전체 테스트와 `bootJar` 절차를 작성했다.
+  - `MYSQL_PORT=3307`, `SERVER_PORT=18080` 같은 개인 로컬 오버라이드는 지원하되 저장소 기본값이나 애플리케이션 설정을 개인 포트로 바꾸지 않았다.
+  - 실제 Controller·DTO와 V2 초기 데이터에 맞춘 `curl.exe` 메뉴 조회·포인트 충전·주문·인기 메뉴 예시와 멱등 키 재사용 주의사항을 작성했다.
+  - README의 구현 현황·다음 단계에서 이미 끝난 S11·S12를 최신 기록 경로와 남은 S14~S15 순서에 맞게 정리했다.
+- 제외 범위:
+  - Java·Spring·DB schema·migration·API 계약·CI·성능 전용 Compose의 동작 변경
+  - 운영용 비밀번호·외부 데이터 플랫폼 URL·개인 IntelliJ 설정의 저장
+  - 일반 로컬 실행에 성능 기준선의 `local,perf` DB·포트·환경 변수를 섞는 일
+- 완료 조건:
+  - 새 환경이 README의 순서만으로 일반 MySQL을 기동하고 `local` 앱의 health 및 초기 메뉴 조회까지 확인할 수 있다.
+  - `MYSQL_PORT`와 `SERVER_PORT` 오버라이드가 Compose·애플리케이션 실행 설명에서 일관되고, Testcontainers 테스트가 로컬 개발 DB를 사용하지 않는다고 명시된다.
+  - API 예시가 V2의 사용자 1~3, 판매 중인 메뉴 1~2, 실제 request/response·Idempotency 헤더 계약과 일치한다.
+  - README의 현재 단계, 파일 참조, 일반·성능 실행 경계가 실제 저장소와 일치하고 문서 공백 검증·전체 테스트·bootJar·diff 검사가 성공한다.
+- 검증 명령:
+
+    docker compose --env-file .env.example -f compose.yaml config
+    docker compose --env-file .env.example -p coffee-order-system-s13 -f compose.yaml up -d --wait
+    $env:SPRING_PROFILES_ACTIVE='local'; $env:MYSQL_PORT='3309'; $env:SERVER_PORT='18082'; .\gradlew.bat bootRun
+    curl.exe --fail http://127.0.0.1:18082/actuator/health
+    curl.exe --fail http://127.0.0.1:18082/api/menus
+    .\gradlew.bat test --no-daemon --rerun-tasks
+    .\gradlew.bat bootJar --no-daemon
+    git diff --check
+
+#### 실제 구현 결과
+
+- 일반 Compose와 기존 MySQL(예: 3307)을 구분한 README 실행 가이드, Java 17·Docker·IntelliJ·`local` 프로필·Flyway 초기 데이터·Testcontainers·성능 프로필 경계를 추가했다.
+- `.env.example`에 Compose와 Gradle/IntelliJ 환경 변수의 전달 경계, 개발용 값의 성격을 명시했다.
+- Windows PowerShell에서 POST JSON의 따옴표가 손실되지 않도록 `curl.exe` 표준입력과 `--data-binary '@-'`를 사용하는 메뉴·충전·주문·인기 메뉴 예시를 추가했다.
+- README의 구현 현황과 남은 마일스톤을 S11·S12 완료 근거 및 S14~S15 순서에 맞췄다.
+
+#### 계획 대비 변경
+
+- 착수 직후 `.yml`만 검색해 기존 `compose.yaml`을 놓친 것을 발견했다. 구현 전에 파일·해시를 재확인하고 Compose 설정 변경을 취소했으며, Plan도 기존 Compose를 문서화하는 범위로 바로잡았다. 최종 변경에는 Compose 설정이 포함되지 않는다.
+
+#### 실제 검증 결과
+
+| 검증 명령 또는 확인 | 결과 |
+| --- | --- |
+| docker compose --env-file .env.example -f compose.yaml config | 성공. MySQL 8.4.10, loopback 3306, UTC, healthcheck와 named volume 계약 확인 |
+| 격리 Compose MYSQL_PORT=3309, -p coffee-order-system-s13 up -d --wait | 성공. 전용 MySQL 컨테이너 healthy |
+| local 프로필, MySQL 3309, 서버 18082 bootRun | 성공. Flyway V1~V3 적용, health UP, 초기 메뉴 1~3 조회 성공 |
+| README PowerShell API 예시 | 충전 200·Idempotency-Replayed false, 주문 201·false, 같은 키·같은 주문 replay 200·true, 인기 메뉴 조회 성공 |
+| test --no-daemon --rerun-tasks | JUnit XML 23개 파일, 105개 테스트, 실패 0, 오류 0 |
+| bootJar --no-daemon | 성공 |
+| git diff --check | 성공 |
+
 ### [S12-01](https://github.com/usersy628/coffee-order-system/issues/9) 공통 예외 처리와 API 오류 계약을 최종 보강한다
 
 - 기록 유형: PR_SUBMISSION
