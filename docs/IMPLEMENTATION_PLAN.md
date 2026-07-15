@@ -48,7 +48,7 @@ READY가 아닌 작업은 구현하지 않는다. RECORDED는 완료 판정이 �
 | --- | --- | --- | --- | --- |
 | [DOC-01](https://github.com/usersy628/coffee-order-system/issues/25) | DONE | PR #24 병합 | 활성 계획과 완료 이력 분리, 인수인계와 PR 본문 규칙 정합성 보완 | 문서 역할·링크·상태가 일치하고 PR 본문 UTF-8 검증 성공 |
 | [DOC-02](https://github.com/usersy628/coffee-order-system/issues/31) | RECORDED | S11 제출 결과 확인 | PR lifecycle과 문서 상태 기준 분리, 불변 제출 기록 도입 | [IMPLEMENTATION_RECORDS.md](IMPLEMENTATION_RECORDS.md)의 제출 기록과 연결 PR에서 검증 |
-| [DOC-03](https://github.com/usersy628/coffee-order-system/issues/37) | READY | S15-01 제출 기록과 연결 GitHub PR 확인 | S15 병합 뒤 최종 인수인계 상태 정리 | Project Status가 현재 작업 없음과 새 요구사항의 이슈 우선 시작 절차를 안내하고 링크·형식 검증 성공 |
+| [DOC-03](https://github.com/usersy628/coffee-order-system/issues/37) | IN_PROGRESS | S15-01 제출 기록과 연결 GitHub PR 확인 | S15 병합 뒤 최종 인수인계 상태 정리 | Project Status가 현재 작업 없음과 새 요구사항의 이슈 우선 시작 절차를 안내하고 링크·형식 검증 성공 |
 | [S5-01](https://github.com/usersy628/coffee-order-system/issues/1) | DONE | 4단계 설계 완료 | 기술 스택·패키지 구조·설정 및 테스트 구성 추천안과 승인 | 선택 사항이 문서화되고 사용자가 승인함 |
 | [S5-02](https://github.com/usersy628/coffee-order-system/issues/2) | DONE | S5-01 | Spring Boot·빌드 도구 기본 구조, traceId·공통 오류 기반과 MySQL Testcontainers 환경 | 기본 컨텍스트·공통 예외 smoke test·MySQL smoke 테스트와 빌드 성공 |
 | [S5-03](https://github.com/usersy628/coffee-order-system/issues/17) | DONE | S5-02 | 리뷰 후속 공통 MVC 오류·Flyway 재실행 검증·PR CI 기반 보완 | 4xx 계약·migration 재실행·GitHub Actions 검증 성공 |
@@ -69,11 +69,11 @@ S9-01과 S10-01은 모두 S8-01만 직접 선행하므로 서로 독립적으로
 
 ## 준비·진행 중인 작업 상세
 
-현재 IN_PROGRESS 작업은 없다. DOC-03은 READY이며, DOC-02, S11-01, S12-01, S13-01, S14-01과 S15-01의 계획·구현·검증 상세는 [IMPLEMENTATION_RECORDS.md](IMPLEMENTATION_RECORDS.md)에 보존한다. 후속 작업 전에는 연결한 GitHub PR의 라이브 상태를 확인한다.
+현재 IN_PROGRESS 작업은 DOC-03 하나다. DOC-02, S11-01, S12-01, S13-01, S14-01과 S15-01의 계획·구현·검증 상세는 [IMPLEMENTATION_RECORDS.md](IMPLEMENTATION_RECORDS.md)에 보존한다. 후속 작업 전에는 연결한 GitHub PR의 라이브 상태를 확인한다.
 
 ### [DOC-03](https://github.com/usersy628/coffee-order-system/issues/37) S15 병합 뒤 최종 인수인계 상태를 정리한다
 
-- 상태: READY
+- 상태: IN_PROGRESS
 - 목적: S15-01 제출 PR의 병합 뒤에도 남아 있는 검토·병합 대기 인수인계를 현재 저장소의 다음 작업 기준과 일치시키되, GitHub 라이브 상태를 정적 문서에 복사하지 않는다.
 - 요구사항 근거:
   - [AGENTS.md의 상태 인수인계 규칙](../AGENTS.md#상태-인수인계)
