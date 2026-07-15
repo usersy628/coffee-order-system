@@ -62,17 +62,17 @@ READY가 아닌 작업은 구현하지 않는다. RECORDED는 완료 판정이 �
 | [S12-01](https://github.com/usersy628/coffee-order-system/issues/9) | RECORDED | S6-01, S7-01, S8-01, S9-01, S10-01, S11-01 | 전역 예외 매핑·traceId·로그와 API 계약 정합성 최종 보강 | [IMPLEMENTATION_RECORDS.md](IMPLEMENTATION_RECORDS.md)의 제출 기록과 연결 PR에서 검증 |
 | [S13-01](https://github.com/usersy628/coffee-order-system/issues/10) | RECORDED | S12-01 | README 실행 방법과 구현 근거 보강 | [IMPLEMENTATION_RECORDS.md](IMPLEMENTATION_RECORDS.md)의 제출 기록과 연결 PR에서 검증 |
 | [S14-01](https://github.com/usersy628/coffee-order-system/issues/11) | RECORDED | S6-01, S7-01, S8-01, S9-01, S10-01, S11-01, S12-01 | 구현 중 수시 기록한 내용을 정리한 TIL 트러블슈팅 문서 | [IMPLEMENTATION_RECORDS.md](IMPLEMENTATION_RECORDS.md)의 제출 기록과 연결 PR에서 검증 |
-| [S15-01](https://github.com/usersy628/coffee-order-system/issues/12) | READY | S13-01, S14-01 | 전체 테스트·보안정보·공개 저장소 제출 검증 | 공개 원격의 깨끗한 clone에서 전체 테스트·패키징·실행 smoke가 성공하고 보안정보·불필요한 산출물이 없음 |
+| [S15-01](https://github.com/usersy628/coffee-order-system/issues/12) | IN_PROGRESS | S13-01, S14-01 | 전체 테스트·보안정보·공개 저장소 제출 검증 | 공개 원격의 깨끗한 clone에서 전체 테스트·패키징·실행 smoke가 성공하고 보안정보·불필요한 산출물이 없음 |
 
 S9-01과 S10-01은 모두 S8-01만 직접 선행하므로 서로 독립적으로 진행할 수 있다. MySQL Testcontainers 기반은 S5-02에서 만들고 S5-03에서 migration 재실행 검증을 보강한 뒤 각 기능 단계에서 사용한다. S11-01의 상세는 제출 기록으로 이동했으므로, S12-01을 시작하기 전에는 정적 기록과 연결한 GitHub PR을 함께 확인한다.
 
 ## 준비·진행 중인 작업 상세
 
-현재 IN_PROGRESS 작업은 없다. DOC-02, S11-01, S12-01, S13-01과 S14-01의 계획·구현·검증 상세는 [IMPLEMENTATION_RECORDS.md](IMPLEMENTATION_RECORDS.md)에 보존한다. S15-01은 아래 상세에 따라 검증을 시작할 수 있다.
+현재 IN_PROGRESS 작업은 S15-01 하나다. DOC-02, S11-01, S12-01, S13-01과 S14-01의 계획·구현·검증 상세는 [IMPLEMENTATION_RECORDS.md](IMPLEMENTATION_RECORDS.md)에 보존한다.
 
 ### [S15-01](https://github.com/usersy628/coffee-order-system/issues/12) 전체 테스트·보안정보·공개 저장소 제출 상태를 검증한다
 
-- 상태: READY
+- 상태: IN_PROGRESS
 - 목적: 공개 원격에서 새로 받은 평가 환경도 저장소 문서만으로 프로젝트를 빌드·테스트·실행할 수 있고, 현재 스냅샷과 Git 이력에 보안정보나 불필요한 산출물이 포함되지 않았음을 최종 확인한다.
 - 요구사항 근거:
   - [README.md의 설정, 초기 데이터와 테스트 구성](../README.md#설정-초기-데이터와-테스트-구성)
@@ -120,7 +120,7 @@ S9-01과 S10-01은 모두 S8-01만 직접 선행하므로 서로 독립적으로
     $artifactHits = git ls-files | Where-Object { ($_ -match '(^|/)(build|\.gradle|\.idea|out|work|outputs)/|\.(class|log|iws|iml|ipr)$') -or (($_ -match '\.jar$') -and ($_ -ne 'gradle/wrapper/gradle-wrapper.jar')) }; if ($artifactHits) { $artifactHits; exit 1 }
     $credentialPaths = git rev-list --objects --all | Where-Object { $_ -match '(^|[ /])(\.env($|\.)|id_(rsa|dsa|ecdsa|ed25519)$|credentials($|\.)|[^/]+\.(pem|key|p12|pfx|jks|keystore)$)' -and $_ -notmatch '\.env\.example$' }; if ($credentialPaths) { $credentialPaths; exit 1 }
     $secretPattern = '-----BEGIN (RSA |EC |OPENSSH |DSA )?PRIVATE KEY-----|github_pat_[A-Za-z0-9_]{20,}|gh[pousr]_[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16}|AIza[0-9A-Za-z_-]{35}|xox[baprs]-[0-9A-Za-z-]{10,}|sk-(proj-)?[A-Za-z0-9_-]{20,}'
-    $secretHits = git rev-list --all | ForEach-Object { git grep -I -l -E $secretPattern $_ 2>$null }; if ($secretHits) { $secretHits | Sort-Object -Unique; exit 1 }
+    $secretHits = git rev-list --all | ForEach-Object { $commit = $_; $paths = git grep -I -l -E -e $secretPattern $commit 2>$null; if ($LASTEXITCODE -gt 1) { throw "Secret scan failed for $commit" }; $paths }; if ($secretHits) { $secretHits | Sort-Object -Unique; exit 1 }
     .\gradlew.bat clean test --no-daemon --rerun-tasks
     .\gradlew.bat bootJar --no-daemon
     git diff --check
@@ -144,6 +144,36 @@ S9-01과 S10-01은 모두 S8-01만 직접 선행하므로 서로 독립적으로
     $resolvedClone = [IO.Path]::GetFullPath($clonePath); $resolvedTemp = [IO.Path]::GetFullPath([IO.Path]::GetTempPath()); if (-not $resolvedClone.StartsWith($resolvedTemp, [StringComparison]::OrdinalIgnoreCase) -or -not (Split-Path $resolvedClone -Leaf).StartsWith("coffee-order-system-s15-")) { throw "Unsafe cleanup path: $resolvedClone" }; Remove-Item -LiteralPath $resolvedClone -Recurse -Force
 
   smoke 실패 시에도 같은 경로·project 검증을 거친 뒤 생성한 애플리케이션 프로세스와 `$composeProject`만 정리한다. 로그는 원문 비밀값을 문서에 복사하지 않고 실패 원인 확인에만 사용한다.
+
+#### 실제 구현 결과
+
+- 현재 추적 파일과 모든 reachable commit에서 고신뢰 비밀 패턴, 자격 증명성 파일명과 불필요한 빌드·IDE 산출물을 검사했고 미해결 항목이 없음을 확인했다.
+- `.env`는 추적되지 않고 `.env.example`의 값은 README가 설명하는 loopback 전용 개발 예시와 일치했다. Gradle Wrapper JAR는 의도한 추적 예외이며 README의 Java 17·Testcontainers·패키징 명령은 GitHub Actions와 일치했다.
+- GitHub 공개 메타데이터에서 저장소가 public이고 기본 브랜치가 `dev`이며 S13·S14가 반영된 것을 확인했다.
+- 공개 원격의 S15 브랜치를 고유 임시 경로에 새로 clone해 전체 테스트와 `bootJar`를 반복하고, 전용 Compose project와 포트 3309·18082에서 패키징 JAR의 `/actuator/health`가 `UP`임을 확인했다.
+- 검증용 Java 프로세스, 컨테이너, network, volume과 임시 clone을 정리했고 기존 local 3307·18080 및 perf 3308·18081 환경은 사용하지 않았다.
+- README의 남은 마일스톤 표현을 제거하고 계획한 고수준 구현·문서화 단계와 최종 제출 검증 근거의 위치를 정리했다.
+
+#### 계획 대비 변경
+
+- 고신뢰 비밀 패턴이 하이픈으로 시작할 때 `git grep`이 옵션으로 오인하는 것을 최종 스냅샷 재검사에서 발견했다. 패턴을 `-e`로 명시하고 exit code 2 이상의 실행 오류를 실패 처리하도록 검증 명령을 보완한 뒤 현재 스냅샷과 전체 reachable history를 다시 검사했다.
+- Windows에서 smoke 프로세스 종료 직후 JAR 핸들 해제가 지연되어, 해당 실행 시각의 Java 프로세스를 확인·종료한 뒤 검증된 임시 경로 정리를 재시도했다. 두 조정 모두 검증 신뢰성과 정리 절차를 보완했으며 대상 파일·완료 조건은 바뀌지 않았다.
+
+#### 실제 검증 결과
+
+| 검증 명령 또는 확인 | 결과 |
+| --- | --- |
+| 추적 산출물 검사 | 불필요한 빌드·IDE·로컬 환경 산출물 없음, Gradle Wrapper JAR만 의도한 예외 |
+| 전체 Git 이력 자격 증명성 파일명·고신뢰 비밀 패턴 검사 | 미해결 항목 없음, 비밀 문자열 원문은 출력하지 않음 |
+| `.gitignore`·`.env.example`·`application*.yml`·Compose·README·CI 대조 | 운영 자격 증명 없음, 개발 예시·loopback·Java 17·검증 명령 일치 |
+| 현재 브랜치 `clean test --no-daemon --rerun-tasks` | JUnit XML 23개 파일, 105개 테스트, 실패 0, 오류 0 |
+| 현재 브랜치 `bootJar --no-daemon` | 성공, 실행 JAR 생성 |
+| 공개 원격의 깨끗한 clone `clean test --no-daemon --rerun-tasks` | JUnit XML 23개 파일, 105개 테스트, 실패 0, 오류 0 |
+| 공개 원격의 깨끗한 clone `bootJar --no-daemon` | 성공, 실행 JAR 생성 |
+| 패키징 JAR 실행 smoke | 전용 MySQL과 `local` profile 기동, `/actuator/health` 응답 `UP` |
+| 검증 자원 정리 | 전용 Java 프로세스·container·network·volume·임시 clone 제거, 포트 3309·18082 해제 |
+| GitHub 저장소 메타데이터 | public, 기본 브랜치 `dev`, S13·S14 반영 확인 |
+| `git diff --check` | 성공 |
 
 ## 작업 상세 템플릿
 
