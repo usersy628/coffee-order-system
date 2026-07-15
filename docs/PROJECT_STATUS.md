@@ -7,7 +7,7 @@
 ## 현재 작업
 
 - 작업: [S14-01](https://github.com/usersy628/coffee-order-system/issues/11) 구현 과정의 TIL 트러블슈팅을 정리한다
-- 작업 상태: READY
+- 작업 상태: IN_PROGRESS
 - 작업 브랜치: feature/issue-11-til-troubleshooting
 - 준비 기준: [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md)의 S14-01 상세
 
