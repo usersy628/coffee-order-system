@@ -34,6 +34,8 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.dao.DataAccessResourceFailureException;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.dao.PessimisticLockingFailureException;
 import org.junit.jupiter.api.extension.ExtendWith;
 
@@ -93,6 +95,34 @@ class GlobalExceptionHandlerTest {
 		assertThat(result.getResponse().getContentAsString())
 			.doesNotContain("non-sensitive-internal-marker")
 			.doesNotContain(IllegalStateException.class.getName());
+	}
+
+	@Test
+	void mapsTransientInfrastructureFailureWithoutLeakingItsMessage(CapturedOutput output) throws Exception {
+		MvcResult result = mockMvc.perform(get("/test/infrastructure-unavailable"))
+			.andExpect(status().isServiceUnavailable())
+			.andExpect(jsonPath("$.code").value("SERVICE_UNAVAILABLE"))
+			.andExpect(jsonPath("$.details").isEmpty())
+			.andReturn();
+
+		assertTraceIdMatchesHeader(result);
+		assertThat(result.getResponse().getContentAsString()).doesNotContain("sensitive-infrastructure-message");
+		assertThat(output.getOut())
+			.contains(" WARN ")
+			.contains("causeType=DataAccessResourceFailureException")
+			.doesNotContain("sensitive-infrastructure-message");
+	}
+
+	@Test
+	void keepsUnexpectedDataIntegrityViolationAsAnInternalServerError() throws Exception {
+		MvcResult result = mockMvc.perform(get("/test/data-integrity-violation"))
+			.andExpect(status().isInternalServerError())
+			.andExpect(jsonPath("$.code").value("INTERNAL_SERVER_ERROR"))
+			.andExpect(jsonPath("$.details").isEmpty())
+			.andReturn();
+
+		assertTraceIdMatchesHeader(result);
+		assertThat(result.getResponse().getContentAsString()).doesNotContain("sensitive-constraint-marker");
 	}
 
 	@Test
@@ -225,6 +255,16 @@ class GlobalExceptionHandlerTest {
 		@GetMapping("/unexpected-error")
 		void unexpectedError() {
 			throw new IllegalStateException("non-sensitive-internal-marker");
+		}
+
+		@GetMapping("/infrastructure-unavailable")
+		void infrastructureUnavailable() {
+			throw new DataAccessResourceFailureException("sensitive-infrastructure-message");
+		}
+
+		@GetMapping("/data-integrity-violation")
+		void dataIntegrityViolation() {
+			throw new DataIntegrityViolationException("sensitive-constraint-marker");
 		}
 
 		@PostMapping("/json")

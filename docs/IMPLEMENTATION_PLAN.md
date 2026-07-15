@@ -59,7 +59,7 @@ READY가 아닌 작업은 구현하지 않는다. RECORDED는 완료 판정이 �
 | [S9-01](https://github.com/usersy628/coffee-order-system/issues/6) | DONE | S8-01 | Outbox 게시자와 Mock 데이터 수집 플랫폼 | V3 수신 저장, claim·lease·fencing·고정 6회 재시도, 실제 HTTP 취소·종료 안전성과 중복 제거 검증 성공 |
 | [S10-01](https://github.com/usersy628/coffee-order-system/issues/7) | DONE | S8-01 | 최근 168시간 인기 메뉴 TOP 3 조회 | 실제 MySQL 기간 경계·수량 합계·동률 정렬·빈 결과·UTC/KST 시간 경계 테스트 성공 |
 | [S11-01](https://github.com/usersy628/coffee-order-system/issues/8) | RECORDED | S6-01, S7-01, S8-01, S9-01, S10-01 | 기능 간 동시성·회귀, k6 부하 기준선과 인기 메뉴 EXPLAIN ANALYZE 검증 | [IMPLEMENTATION_RECORDS.md](IMPLEMENTATION_RECORDS.md)의 제출 기록과 연결 PR에서 검증 |
-| [S12-01](https://github.com/usersy628/coffee-order-system/issues/9) | BACKLOG | S6-01, S7-01, S8-01, S9-01, S10-01, S11-01 | 전역 예외 매핑·traceId·로그와 API 계약 정합성 최종 보강 | 검증·도메인·동시성·예상외 500 응답과 헤더 계약 전체 테스트 성공 |
+| [S12-01](https://github.com/usersy628/coffee-order-system/issues/9) | IN_PROGRESS | S6-01, S7-01, S8-01, S9-01, S10-01, S11-01 | 전역 예외 매핑·traceId·로그와 API 계약 정합성 최종 보강 | 검증·도메인·동시성·일시적 인프라·예상외 500 응답과 헤더 계약 전체 테스트 성공 |
 | [S13-01](https://github.com/usersy628/coffee-order-system/issues/10) | BACKLOG | S12-01 | README 실행 방법과 구현 근거 보강 | 새 환경에서 문서만으로 실행·테스트 가능 |
 | [S14-01](https://github.com/usersy628/coffee-order-system/issues/11) | BACKLOG | S6-01, S7-01, S8-01, S9-01, S10-01, S11-01, S12-01 | 구현 중 수시 기록한 내용을 정리한 TIL 트러블슈팅 문서 | 문제·원인·해결·검증 근거가 기록됨 |
 | [S15-01](https://github.com/usersy628/coffee-order-system/issues/12) | BACKLOG | S13-01, S14-01 | 전체 테스트·보안정보·공개 저장소 제출 검증 | 깨끗한 clone 기준 빌드와 전체 테스트 성공 |
@@ -68,7 +68,58 @@ S9-01과 S10-01은 모두 S8-01만 직접 선행하므로 서로 독립적으로
 
 ## 준비·진행 중인 작업 상세
 
-현재 IN_PROGRESS 작업은 없다. DOC-02와 S11-01의 계획·구현·검증 상세는 [IMPLEMENTATION_RECORDS.md](IMPLEMENTATION_RECORDS.md)에 보존한다. 다음 기능 작업을 시작하기 전에는 연결한 GitHub PR의 라이브 상태를 확인한다.
+현재 IN_PROGRESS 작업은 S12-01 하나다. DOC-02와 S11-01의 계획·구현·검증 상세는 [IMPLEMENTATION_RECORDS.md](IMPLEMENTATION_RECORDS.md)에 보존한다. 다음 기능 작업을 시작하기 전에는 연결한 GitHub PR의 라이브 상태를 확인한다.
+
+### [S12-01](https://github.com/usersy628/coffee-order-system/issues/9) 공통 예외 처리와 API 오류 계약을 최종 보강한다
+
+- 상태: IN_PROGRESS
+- 목적: 모든 API가 같은 code, message, details, traceId 오류 응답과 X-Trace-Id 헤더를 사용하게 하고, 일시적 인프라 오류와 구현 결함을 서로 다르게 표현한다.
+- 요구사항 근거:
+  - [README.md의 예외 처리와 추적](../README.md#예외-처리와-추적)
+  - [README.md의 공통 오류 응답](../README.md#공통-규칙)
+  - [README.md의 테스트 전략](../README.md#테스트-전략)
+  - [issue #9](https://github.com/usersy628/coffee-order-system/issues/9)
+- 선행 작업: S6-01부터 S11-01의 API, 재시도 예외, traceId filter와 통합 테스트 기반을 사용한다.
+- 작업 브랜치: feature/issue-9-global-error-contract
+- 정책:
+  - ErrorCode에 SERVICE_UNAVAILABLE를 추가하고, Spring의 DataAccessResourceFailureException만 503으로 변환한다. 이 범위는 DB 연결·커넥션 풀처럼 일시적으로 사용할 수 없는 인프라 오류에 한정한다.
+  - DataIntegrityViolationException 전체를 409로 바꾸지 않는다. 명령 계층에서 이미 식별한 멱등 유니크 충돌 외의 제약 위반은 catch-all을 통해 500 INTERNAL_SERVER_ERROR로 남긴다.
+  - PointChargeRetryFailureException과 OrderRetryFailureException의 503 CONCURRENT_REQUEST_TIMEOUT 계약은 그대로 둔다. 재시도되지 않은 락 예외나 다른 DataAccessException을 넓게 503으로 바꾸지 않는다.
+  - 4xx는 정보 로그, 재시도 소진과 일시적 인프라 503은 원문 예외 메시지 없이 원인 타입과 traceId만 경고 로그, 예상외 500은 서버 로그에 traceId와 스택을 남긴다. 응답에는 내부 메시지·스택·원문 Idempotency-Key·payload·인증정보를 노출하지 않는다.
+  - TraceIdFilter가 생성한 서버 traceId는 외부 입력을 신뢰하지 않고 오류 body와 X-Trace-Id 헤더에 같은 값으로 표현하며 요청 종료 뒤 MDC에서 제거한다.
+- 대상 파일:
+  - src/main/java/com/usersy628/coffeeorder/global/error/ErrorCode.java
+  - src/main/java/com/usersy628/coffeeorder/global/error/GlobalExceptionHandler.java
+  - src/test/java/com/usersy628/coffeeorder/global/error/GlobalExceptionHandlerTest.java
+  - docs/IMPLEMENTATION_PLAN.md
+  - docs/PROJECT_STATUS.md
+- 먼저 수행할 테스트 또는 검증:
+  1. GlobalExceptionHandlerTest에 DataAccessResourceFailureException을 던지는 test endpoint와 503 SERVICE_UNAVAILABLE 기대를 먼저 추가해, 현재 500 응답으로 실패함을 확인한다.
+  2. DataIntegrityViolationException을 던지는 test endpoint가 409로 오분류되지 않고 안전한 500 응답으로 남는지 확인한다.
+  3. 각 새 오류 응답에서 body traceId와 X-Trace-Id가 같고, 응답 및 503 경고 로그에 테스트용 민감 문자열이 없는지 확인한다.
+- 구현 범위:
+  - SERVICE_UNAVAILABLE 오류 코드와 보수적인 인프라 예외 handler를 추가한다.
+  - 기존 GlobalExceptionHandlerTest에 503 인프라 오류, 500 제약 위반, traceId·응답 비밀값·로그 비밀값 계약을 보강한다.
+  - 기존 validation, domain, retry exhaustion, malformed JSON, Content-Type, endpoint-not-found 계약이 회귀하지 않는지 같은 테스트 클래스와 전체 테스트로 확인한다.
+- 제외 범위:
+  - 오류 코드마다 별도 예외 클래스 생성
+  - DataAccessException 전체, DataIntegrityViolationException 전체 또는 재시도되지 않은 락 예외의 광범위한 503 변환
+  - 재시도 횟수, Hikari 설정, DB schema, API 버전, 오류 응답 형식 변경
+  - 로그 수집 인프라 또는 외부 observability 도입
+- 완료 조건:
+  - DB 연결·리소스 실패는 503 SERVICE_UNAVAILABLE, 재시도 소진은 503 CONCURRENT_REQUEST_TIMEOUT, 예상외 제약 위반은 500 INTERNAL_SERVER_ERROR로 구분된다.
+  - 모든 새 오류 body는 빈 details, 안전한 message, 32자리 서버 traceId를 가지며 X-Trace-Id와 일치한다.
+  - 응답과 일시적 인프라 경고 로그에 테스트용 원문 민감값이 없고, catch-all 500 응답에 내부 예외 정보가 없다.
+  - 기존 전역 오류 테스트와 전체 테스트가 통과하고 bootJar와 git diff --check가 성공한다.
+- 검증 명령:
+
+    .\gradlew.bat test --tests "com.usersy628.coffeeorder.global.error.GlobalExceptionHandlerTest"
+    .\gradlew.bat test --tests "com.usersy628.coffeeorder.global.trace.TraceIdFilterTest"
+    .\gradlew.bat test --tests "com.usersy628.coffeeorder.point.api.PointChargeApiIntegrationTest"
+    .\gradlew.bat test --tests "com.usersy628.coffeeorder.order.api.OrderApiIntegrationTest"
+    .\gradlew.bat test --no-daemon --rerun-tasks
+    .\gradlew.bat bootJar --no-daemon
+    git diff --check
 
 ## 작업 상세 템플릿
 
