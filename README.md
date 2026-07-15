@@ -1042,7 +1042,11 @@ S11의 격리된 local 기준선 실행 순서와 결과 양식은 [`docs/perfor
 
 ## 다음 단계
 
-구현 작업의 상태, 선행 관계, 대상 파일과 검증 기준은 [`docs/IMPLEMENTATION_PLAN.md`](docs/IMPLEMENTATION_PLAN.md)에서 관리합니다. 이 문서는 구현 순서만 관리하며, 요구사항·ERD·API 계약과 기술적 결정의 단일 기준은 계속 `README.md`입니다. Spring Boot 기본 구조, MySQL Testcontainers 기반, 메뉴 목록, 포인트 충전과 주문·결제 및 트랜잭션 내 Outbox 저장은 완료했으며, 아래 목록은 남은 고수준 마일스톤입니다.
+구현 작업의 상태, 선행 관계, 대상 파일과 첫 PR 제출 전 상세는 [docs/IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md)에서 관리합니다. PR 제출 당시의 계획·구현·검증 근거는 [docs/IMPLEMENTATION_RECORDS.md](docs/IMPLEMENTATION_RECORDS.md)에 불변 기록으로 보존하고, DOC-02 이전 이력은 [docs/IMPLEMENTATION_HISTORY.md](docs/IMPLEMENTATION_HISTORY.md)에서만 참고합니다. issue·PR·CI·병합의 현재 상태는 각 GitHub 링크가 기준입니다. 요구사항·ERD·API 계약과 기술적 결정의 단일 기준은 계속 README.md입니다.
 
-1. 인기 메뉴 TOP 3 집계
-2. 기능 간 MySQL Testcontainers 회귀·부하 테스트와 제출 문서 완성
+Spring Boot 기본 구조, MySQL Testcontainers 기반, 메뉴 목록, 포인트 충전, 주문·결제, 트랜잭션 내 Outbox 저장과 인기 메뉴 TOP 3 조회의 구현 근거는 제출 기록과 테스트에 남아 있습니다. S11의 기능 간 MySQL 회귀·부하 기준선·실행계획 근거는 [S11_BASELINE.md](docs/performance/S11_BASELINE.md)와 제출 기록에서 확인합니다. 아래 목록은 남은 고수준 마일스톤입니다.
+
+1. 전역 예외 매핑·traceId·로그와 API 계약 정합성 최종 보강
+2. README 실행 방법과 구현 근거 보강
+3. TIL 트러블슈팅 문서 정리
+4. 전체 테스트·보안정보·공개 저장소 제출 검증

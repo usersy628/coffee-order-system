@@ -1,8 +1,10 @@
-# Implementation History
+# Implementation History (Legacy)
 
-이 문서는 `DONE` 작업의 전체 작업 상세와 실제 검증 결과를 보존한다. 전체 상태와 완료되지 않은 작업은 [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md), 현재 인수인계는 [`PROJECT_STATUS.md`](PROJECT_STATUS.md)에서 확인한다.
+이 문서는 DOC-02 이전에 작성한 완료 작업의 역사적 스냅샷을 보존한다. 기존 항목의 issue·PR·CI·merge commit 표기는 기록 당시의 값일 수 있으며, 현재 상태를 판단하는 용도로 쓰지 않는다.
 
-작업을 완료하는 PR의 최종 문서 커밋에서 상세를 Plan에서 이 문서로 옮기고 issue, PR, merge commit, 완료일과 실제 검증 결과를 기록한다. PR이 아직 병합 전이면 merge commit은 `병합 후 기록`으로 두고, 병합을 명시적으로 승인받은 뒤 후속 상태 갱신에서 실제 해시로 교체한다.
+DOC-02 이후 새 작업의 제출 기록은 [IMPLEMENTATION_RECORDS.md](IMPLEMENTATION_RECORDS.md)에 추가한다. 전체 작업 인덱스와 아직 첫 PR을 제출하지 않은 상세는 [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md), 짧은 인수인계는 [PROJECT_STATUS.md](PROJECT_STATUS.md)에서 확인한다. 현재 issue·PR·CI·병합 상태는 항상 연결한 GitHub 링크가 기준이다.
+
+이 legacy archive의 항목을 GitHub의 현재 상태에 맞추기 위해 일괄 갱신하지 않는다.
 
 ## 완료 작업 상세
 
