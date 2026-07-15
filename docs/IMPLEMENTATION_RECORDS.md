@@ -11,6 +11,80 @@
 
 ## PR 제출 기록
 
+### [S14-01](https://github.com/usersy628/coffee-order-system/issues/11) 구현 과정의 TIL 트러블슈팅을 정리한다
+
+- 기록 유형: PR_SUBMISSION
+- 기록일: 2026-07-15
+- 제출 브랜치: feature/issue-11-til-troubleshooting
+- 연결:
+  - 이슈: [#11](https://github.com/usersy628/coffee-order-system/issues/11)
+  - PR: [#35](https://github.com/usersy628/coffee-order-system/pull/35)
+  - 준비 계획 커밋: 98d70b6
+  - 구현 커밋: b2f1608
+- 목적: 이미 검증된 동시성·멱등성·트랜잭션·Outbox·실행계획·부하 기준선 사례를 초보자도 재현 경로와 한계까지 이해할 수 있는 학습 기록으로 정리한다.
+- 요구사항 근거:
+  - [README.md의 동시성 및 트랜잭션 상세 전략](../README.md#동시성-및-트랜잭션-상세-전략)
+  - [README.md의 Outbox 상태 전이와 fencing](../README.md#outbox-상태-전이와-fencing)
+  - [README.md의 부하 대응과 확장 기준](../README.md#부하-대응과-확장-기준)
+  - [README.md의 테스트 전략](../README.md#테스트-전략)
+  - [S11 기준선](performance/S11_BASELINE.md)
+  - [issue #11](https://github.com/usersy628/coffee-order-system/issues/11)
+- 선행 작업: S6-01부터 S12-01까지의 구현·검증 기록이 있고, S13-01 PR #34가 `dev`에 병합된 최신 `origin/dev`를 기준으로 한다.
+- 작업 브랜치: feature/issue-11-til-troubleshooting
+- 대상 파일:
+  - docs/TIL_TROUBLESHOOTING.md
+  - README.md
+  - docs/IMPLEMENTATION_PLAN.md
+  - docs/PROJECT_STATUS.md
+- 먼저 수행한 검증:
+  1. 제출 기록, legacy history, S11 기준선, 실제 통합 테스트 경로를 대조해 각 사례에 재현 조건·관찰 결과·검증 명령이 모두 있는지 확인했다.
+  2. S11의 실패 기준선 수치와 Hikari 관찰값을 확인하되, 단일 측정만으로 인과관계나 최적화 효과를 단정하지 않는지 검토했다.
+  3. 새 문서의 상대 링크, 용어와 코드·테스트 경로가 최신 `dev`에서 실제로 존재하고 비밀값·개인 환경 값이 없는지 확인했다.
+- 구현 범위:
+  - `docs/TIL_TROUBLESHOOTING.md`에 다음 다섯 사례를 같은 형식(문제·재현 조건·관찰·원인·검토 대안·선택·검증 근거·한계)으로 작성했다.
+    1. 지갑 락 뒤 current read와 정규화된 멱등 요청으로 동시 replay를 한 번만 반영한 사례
+    2. 주문·포인트·이력·Outbox를 하나의 DB 트랜잭션에 넣어 ghost data를 막은 사례
+    3. Outbox lease·claim token fencing과 소비자 중복 제거로 at-least-once 전달을 안전하게 만든 사례
+    4. 인기 메뉴 SQL의 `EXPLAIN ANALYZE` 관찰만으로 인덱스·캐시를 성급히 추가하지 않은 사례
+    5. k6 실패 기준선에서 p95·오류율·dropped iterations·Hikari 대기를 함께 읽고, 개선 전 비교 기준으로 남긴 사례
+  - 각 사례에서 README의 설계 기준, 실제 테스트 또는 기준선, 제출 기록을 링크로 연결하고, 사실·추론·미확정 후속 개선을 구분했다.
+  - README의 다음 단계에서 TIL 문서로 이동할 수 있게 한 줄 링크를 추가했다.
+- 제외 범위:
+  - Java·Spring·DB schema·migration·API·Outbox 정책·성능 설정의 동작 변경
+  - k6 재실행, 새 벤치마크 수치 작성, 인덱스·Redis·replica·pool tuning 추가
+  - 개인 MySQL·IntelliJ·Docker 자격 증명, 비밀값, 단순 일지나 커밋 목록의 전사
+- 완료 조건:
+  - 다섯 사례 모두 재현 조건, 실제 관찰·실패 또는 위험, 검토 대안, 채택 이유, 테스트·기준선 근거, 한계를 포함한다.
+  - S11의 실패 결과를 성능 통과나 확정 원인으로 오해하지 않게 기록하고, 향후 개선은 별도 측정·이슈가 필요함을 명시한다.
+  - README와 TIL 문서의 링크·용어·파일 경로가 실제 저장소와 일치하고 문서 검증 및 전체 테스트·패키징 검사가 성공한다.
+- 검증 명령:
+
+    rg -n "동시성|멱등|트랜잭션|Outbox|EXPLAIN|k6|Hikari" README.md docs/TIL_TROUBLESHOOTING.md docs/IMPLEMENTATION_RECORDS.md docs/IMPLEMENTATION_HISTORY.md docs/performance/S11_BASELINE.md
+    .\gradlew.bat test --no-daemon --rerun-tasks
+    .\gradlew.bat bootJar --no-daemon
+    git diff --check
+
+#### 실제 구현 결과
+
+- 다섯 사례를 동일한 학습 구조로 추가했다. 각 사례는 테스트·제출 기록·S11 기준선 링크를 통해 재현 조건과 검증 근거를 바로 찾을 수 있다.
+- 동시 멱등성에서는 지갑 락·current read·정규화 hash의 순서와 MySQL `REPEATABLE READ` snapshot 문제를, 주문 원자성에서는 ghost data 부재를 실제 MySQL 회귀 결과로 설명했다.
+- Outbox에서는 at-least-once·claim token fencing·소비자 `eventId` 중복 제거의 역할을 나누고, 실행계획·k6 사례에서는 관찰값과 미확정 원인을 구분했다.
+- README 다음 단계에 TIL 문서 링크를 추가했다.
+
+#### 계획 대비 변경
+
+- 없음
+
+#### 실제 검증 결과
+
+| 검증 명령 또는 확인 | 결과 |
+| --- | --- |
+| Markdown 상대 링크 확인 | README와 TIL 문서의 상대 링크 모두 실제 파일에 연결됨 |
+| 근거·용어·비밀값 점검 | 다섯 사례가 README·기록·테스트·S11 기준선과 연결되고, 인증정보·개인 환경 값 없음 |
+| test --no-daemon --rerun-tasks | JUnit XML 23개 파일, 105개 테스트, 실패 0, 오류 0 |
+| bootJar --no-daemon | 성공, build/libs/coffee-order-system-0.0.1-SNAPSHOT.jar 생성 |
+| git diff --check | 성공 |
+
 ### [S13-01](https://github.com/usersy628/coffee-order-system/issues/10) README 실행 방법과 구현 근거를 완성한다
 
 - 기록 유형: PR_SUBMISSION
