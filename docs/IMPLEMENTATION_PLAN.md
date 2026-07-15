@@ -61,14 +61,60 @@ READY가 아닌 작업은 구현하지 않는다. RECORDED는 완료 판정이 �
 | [S11-01](https://github.com/usersy628/coffee-order-system/issues/8) | RECORDED | S6-01, S7-01, S8-01, S9-01, S10-01 | 기능 간 동시성·회귀, k6 부하 기준선과 인기 메뉴 EXPLAIN ANALYZE 검증 | [IMPLEMENTATION_RECORDS.md](IMPLEMENTATION_RECORDS.md)의 제출 기록과 연결 PR에서 검증 |
 | [S12-01](https://github.com/usersy628/coffee-order-system/issues/9) | RECORDED | S6-01, S7-01, S8-01, S9-01, S10-01, S11-01 | 전역 예외 매핑·traceId·로그와 API 계약 정합성 최종 보강 | [IMPLEMENTATION_RECORDS.md](IMPLEMENTATION_RECORDS.md)의 제출 기록과 연결 PR에서 검증 |
 | [S13-01](https://github.com/usersy628/coffee-order-system/issues/10) | RECORDED | S12-01 | README 실행 방법과 구현 근거 보강 | [IMPLEMENTATION_RECORDS.md](IMPLEMENTATION_RECORDS.md)의 제출 기록과 연결 PR에서 검증 |
-| [S14-01](https://github.com/usersy628/coffee-order-system/issues/11) | BACKLOG | S6-01, S7-01, S8-01, S9-01, S10-01, S11-01, S12-01 | 구현 중 수시 기록한 내용을 정리한 TIL 트러블슈팅 문서 | 문제·원인·해결·검증 근거가 기록됨 |
+| [S14-01](https://github.com/usersy628/coffee-order-system/issues/11) | READY | S6-01, S7-01, S8-01, S9-01, S10-01, S11-01, S12-01 | 구현 중 수시 기록한 내용을 정리한 TIL 트러블슈팅 문서 | 문제·원인·해결·검증 근거가 기록됨 |
 | [S15-01](https://github.com/usersy628/coffee-order-system/issues/12) | BACKLOG | S13-01, S14-01 | 전체 테스트·보안정보·공개 저장소 제출 검증 | 깨끗한 clone 기준 빌드와 전체 테스트 성공 |
 
 S9-01과 S10-01은 모두 S8-01만 직접 선행하므로 서로 독립적으로 진행할 수 있다. MySQL Testcontainers 기반은 S5-02에서 만들고 S5-03에서 migration 재실행 검증을 보강한 뒤 각 기능 단계에서 사용한다. S11-01의 상세는 제출 기록으로 이동했으므로, S12-01을 시작하기 전에는 정적 기록과 연결한 GitHub PR을 함께 확인한다.
 
 ## 준비·진행 중인 작업 상세
 
-현재 IN_PROGRESS 작업은 없다. DOC-02, S11-01, S12-01과 S13-01의 계획·구현·검증 상세는 [IMPLEMENTATION_RECORDS.md](IMPLEMENTATION_RECORDS.md)에 보존한다. 다음 기능 작업을 시작하기 전에는 연결한 GitHub PR의 라이브 상태를 확인한다.
+현재 IN_PROGRESS 작업은 없다. S14-01은 READY이며, DOC-02, S11-01, S12-01과 S13-01의 계획·구현·검증 상세는 [IMPLEMENTATION_RECORDS.md](IMPLEMENTATION_RECORDS.md)에 보존한다. 다음 기능 작업을 시작하기 전에는 연결한 GitHub PR의 라이브 상태를 확인한다.
+
+### [S14-01](https://github.com/usersy628/coffee-order-system/issues/11) 구현 과정의 TIL 트러블슈팅을 정리한다
+
+- 상태: READY
+- 목적: 이미 검증된 동시성·멱등성·트랜잭션·Outbox·실행계획·부하 기준선 사례를 초보자도 재현 경로와 한계까지 이해할 수 있는 학습 기록으로 정리한다.
+- 요구사항 근거:
+  - [README.md의 동시성 및 트랜잭션 상세 전략](../README.md#동시성-및-트랜잭션-상세-전략)
+  - [README.md의 Outbox 상태 전이와 fencing](../README.md#outbox-상태-전이와-fencing)
+  - [README.md의 부하 대응과 확장 기준](../README.md#부하-대응과-확장-기준)
+  - [README.md의 테스트 전략](../README.md#테스트-전략)
+  - [S11 기준선](performance/S11_BASELINE.md)
+  - [issue #11](https://github.com/usersy628/coffee-order-system/issues/11)
+- 선행 작업: S6-01부터 S12-01까지의 구현·검증 기록이 있고, S13-01 PR #34가 `dev`에 병합된 최신 `origin/dev`를 기준으로 한다.
+- 작업 브랜치: feature/issue-11-til-troubleshooting
+- 대상 파일:
+  - docs/TIL_TROUBLESHOOTING.md
+  - README.md
+  - docs/IMPLEMENTATION_PLAN.md
+  - docs/PROJECT_STATUS.md
+- 먼저 수행할 테스트 또는 검증:
+  1. 제출 기록, legacy history, S11 기준선, 실제 통합 테스트 경로를 대조해 각 사례에 재현 조건·관찰 결과·검증 명령이 모두 있는지 확인한다.
+  2. S11의 실패 기준선 수치와 Hikari 관찰값을 확인하되, 단일 측정만으로 인과관계나 최적화 효과를 단정하지 않는지 검토한다.
+  3. 새 문서의 상대 링크, 용어와 코드·테스트 경로가 최신 `dev`에서 실제로 존재하고 비밀값·개인 환경 값이 없는지 확인한다.
+- 구현 범위:
+  - `docs/TIL_TROUBLESHOOTING.md`에 다음 다섯 사례를 같은 형식(문제·재현 조건·관찰·원인·검토 대안·선택·검증 근거·한계)으로 작성한다.
+    1. 지갑 락 뒤 current read와 정규화된 멱등 요청으로 동시 replay를 한 번만 반영한 사례
+    2. 주문·포인트·이력·Outbox를 하나의 DB 트랜잭션에 넣어 ghost data를 막은 사례
+    3. Outbox lease·claim token fencing과 소비자 중복 제거로 at-least-once 전달을 안전하게 만든 사례
+    4. 인기 메뉴 SQL의 `EXPLAIN ANALYZE` 관찰만으로 인덱스·캐시를 성급히 추가하지 않은 사례
+    5. k6 실패 기준선에서 p95·오류율·dropped iterations·Hikari 대기를 함께 읽고, 개선 전 비교 기준으로 남긴 사례
+  - 각 사례에서 README의 설계 기준, 실제 테스트 또는 기준선, 제출 기록을 링크로 연결하고, 사실·추론·미확정 후속 개선을 구분한다.
+  - README의 다음 단계에서 TIL 문서로 이동할 수 있게 한 줄 링크를 추가한다.
+- 제외 범위:
+  - Java·Spring·DB schema·migration·API·Outbox 정책·성능 설정의 동작 변경
+  - k6 재실행, 새 벤치마크 수치 작성, 인덱스·Redis·replica·pool tuning 추가
+  - 개인 MySQL·IntelliJ·Docker 자격 증명, 비밀값, 단순 일지나 커밋 목록의 전사
+- 완료 조건:
+  - 다섯 사례 모두 재현 조건, 실제 관찰·실패 또는 위험, 검토 대안, 채택 이유, 테스트·기준선 근거, 한계를 포함한다.
+  - S11의 실패 결과를 성능 통과나 확정 원인으로 오해하지 않게 기록하고, 향후 개선은 별도 측정·이슈가 필요함을 명시한다.
+  - README와 TIL 문서의 링크·용어·파일 경로가 실제 저장소와 일치하고 문서 검증 및 전체 테스트·패키징 검사가 성공한다.
+- 검증 명령:
+
+    rg -n "동시성|멱등|트랜잭션|Outbox|EXPLAIN|k6|Hikari" README.md docs/TIL_TROUBLESHOOTING.md docs/IMPLEMENTATION_RECORDS.md docs/IMPLEMENTATION_HISTORY.md docs/performance/S11_BASELINE.md
+    .\gradlew.bat test --no-daemon --rerun-tasks
+    .\gradlew.bat bootJar --no-daemon
+    git diff --check
 
 ## 작업 상세 템플릿
 

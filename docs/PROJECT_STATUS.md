@@ -6,11 +6,11 @@
 
 ## 현재 작업
 
-- 현재 Plan의 IN_PROGRESS 작업: 없음
-- 최근 제출 기록: [S13-01](IMPLEMENTATION_RECORDS.md) README 실행 방법과 구현 근거 보강
-- 검토 링크: [PR #34](https://github.com/usersy628/coffee-order-system/pull/34)
-- 직전 제출 기록: [S12-01](IMPLEMENTATION_RECORDS.md)의 공통 오류 계약 근거
+- 작업: [S14-01](https://github.com/usersy628/coffee-order-system/issues/11) 구현 과정의 TIL 트러블슈팅을 정리한다
+- 작업 상태: READY
+- 작업 브랜치: feature/issue-11-til-troubleshooting
+- 준비 기준: [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md)의 S14-01 상세
 
 ## 다음 행동
 
-PR #34의 GitHub checks와 별도 검토 결과를 확인한다. 검토가 끝나고 사용자가 명시적으로 병합을 승인한 경우에만 UTF-8 본문 파일로 Refs #10을 Closes #10으로 바꿔 검증한 뒤 병합한다.
+S14-01의 다섯 TIL 사례를 제출 기록·테스트·S11 기준선에만 근거해 작성하고, 새 설계나 성능 개선을 섞지 않는다.
