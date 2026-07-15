@@ -6,12 +6,11 @@
 
 ## 현재 작업
 
-- 작업: [S13-01](https://github.com/usersy628/coffee-order-system/issues/10) README 실행 방법과 구현 근거를 완성한다
-- 작업 상태: IN_PROGRESS
-- 작업 브랜치: feature/issue-10-readme-runbook
-- 준비 기준: [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md)의 S13-01 상세
+- 현재 Plan의 IN_PROGRESS 작업: 없음
+- 최근 제출 기록: [S13-01](IMPLEMENTATION_RECORDS.md) README 실행 방법과 구현 근거 보강
+- 검토 링크: [PR #34](https://github.com/usersy628/coffee-order-system/pull/34)
 - 직전 제출 기록: [S12-01](IMPLEMENTATION_RECORDS.md)의 공통 오류 계약 근거
 
 ## 다음 행동
 
-S13-01 변경을 최종 점검·커밋·push한 뒤, 전체 Plan 상세를 UTF-8 본문 파일로 넣은 dev 대상 PR을 만든다.
+PR #34의 GitHub checks와 별도 검토 결과를 확인한다. 검토가 끝나고 사용자가 명시적으로 병합을 승인한 경우에만 UTF-8 본문 파일로 Refs #10을 Closes #10으로 바꿔 검증한 뒤 병합한다.
