@@ -60,7 +60,7 @@ READY가 아닌 작업은 구현하지 않는다. RECORDED는 완료 판정이 �
 | [S10-01](https://github.com/usersy628/coffee-order-system/issues/7) | DONE | S8-01 | 최근 168시간 인기 메뉴 TOP 3 조회 | 실제 MySQL 기간 경계·수량 합계·동률 정렬·빈 결과·UTC/KST 시간 경계 테스트 성공 |
 | [S11-01](https://github.com/usersy628/coffee-order-system/issues/8) | RECORDED | S6-01, S7-01, S8-01, S9-01, S10-01 | 기능 간 동시성·회귀, k6 부하 기준선과 인기 메뉴 EXPLAIN ANALYZE 검증 | [IMPLEMENTATION_RECORDS.md](IMPLEMENTATION_RECORDS.md)의 제출 기록과 연결 PR에서 검증 |
 | [S12-01](https://github.com/usersy628/coffee-order-system/issues/9) | RECORDED | S6-01, S7-01, S8-01, S9-01, S10-01, S11-01 | 전역 예외 매핑·traceId·로그와 API 계약 정합성 최종 보강 | [IMPLEMENTATION_RECORDS.md](IMPLEMENTATION_RECORDS.md)의 제출 기록과 연결 PR에서 검증 |
-| [S13-01](https://github.com/usersy628/coffee-order-system/issues/10) | READY | S12-01 | README 실행 방법과 구현 근거 보강 | 새 환경에서 문서만으로 실행·테스트 가능 |
+| [S13-01](https://github.com/usersy628/coffee-order-system/issues/10) | IN_PROGRESS | S12-01 | README 실행 방법과 구현 근거 보강 | 새 환경에서 문서만으로 실행·테스트 가능 |
 | [S14-01](https://github.com/usersy628/coffee-order-system/issues/11) | BACKLOG | S6-01, S7-01, S8-01, S9-01, S10-01, S11-01, S12-01 | 구현 중 수시 기록한 내용을 정리한 TIL 트러블슈팅 문서 | 문제·원인·해결·검증 근거가 기록됨 |
 | [S15-01](https://github.com/usersy628/coffee-order-system/issues/12) | BACKLOG | S13-01, S14-01 | 전체 테스트·보안정보·공개 저장소 제출 검증 | 깨끗한 clone 기준 빌드와 전체 테스트 성공 |
 
@@ -68,11 +68,11 @@ S9-01과 S10-01은 모두 S8-01만 직접 선행하므로 서로 독립적으로
 
 ## 준비·진행 중인 작업 상세
 
-현재 IN_PROGRESS 작업은 없다. DOC-02, S11-01과 S12-01의 계획·구현·검증 상세는 [IMPLEMENTATION_RECORDS.md](IMPLEMENTATION_RECORDS.md)에 보존한다. 다음 기능 작업을 시작하기 전에는 연결한 GitHub PR의 라이브 상태를 확인한다.
+현재 IN_PROGRESS 작업은 S13-01 하나다. DOC-02, S11-01과 S12-01의 계획·구현·검증 상세는 [IMPLEMENTATION_RECORDS.md](IMPLEMENTATION_RECORDS.md)에 보존한다. 다음 기능 작업을 시작하기 전에는 연결한 GitHub PR의 라이브 상태를 확인한다.
 
 ### [S13-01](https://github.com/usersy628/coffee-order-system/issues/10) README 실행 방법과 구현 근거를 완성한다
 
-- 상태: READY
+- 상태: IN_PROGRESS
 - 목적: 처음 받은 개발자가 README만으로 일반 로컬 MySQL, Spring Boot `local` 프로필, Testcontainers 테스트와 과제용 API 예시를 실제 구현과 같은 방식으로 실행·검증하게 한다.
 - 요구사항 근거:
   - [README.md의 런타임과 빌드 도구](../README.md#런타임과-빌드-도구)
@@ -84,16 +84,15 @@ S9-01과 S10-01은 모두 S8-01만 직접 선행하므로 서로 독립적으로
 - 작업 브랜치: feature/issue-10-readme-runbook
 - 대상 파일:
   - README.md
-  - compose.yaml (신규)
   - .env.example
   - docs/IMPLEMENTATION_PLAN.md
   - docs/PROJECT_STATUS.md
 - 먼저 수행할 테스트 또는 검증:
-  1. README와 `.env.example`이 참조하지만 일반 로컬 `compose.yaml`이 없는 불일치를 확인한다.
+  1. 일반 로컬 `compose.yaml`, `.env.example`, `application-local.yml`의 MySQL image·환경 변수·loopback port가 같은 계약인지 확인한다.
   2. `application-local.yml`, `application-test.yml`, Flyway V2 초기 데이터와 Controller·DTO를 읽어 환경 변수, 초기 사용자·메뉴, API 예시가 실제 값과 같은지 확인한다.
   3. 성능 전용 `docker-compose.performance.yml`의 별도 DB·포트·비밀값 규칙을 확인해 일반 로컬 실행 절차와 섞이지 않게 한다.
 - 구현 범위:
-  - 일반 개발용 MySQL 8.4.10 `compose.yaml`을 추가한다. 데이터베이스·사용자·비밀번호·host port는 `.env` 또는 환경 변수로 바꾸고, host port는 loopback만 바인딩하며 UTF-8·UTC·healthcheck·named volume을 둔다.
+  - 기존 일반 개발용 MySQL 8.4.10 `compose.yaml`의 데이터베이스·사용자·비밀번호·host port 환경 변수, loopback 바인딩·UTC·healthcheck·named volume을 README에 정확히 설명한다.
   - README에 Java 17·Docker 준비 조건, `.env.example` 복사, Compose 기동, `SPRING_PROFILES_ACTIVE=local` 실행, IntelliJ 환경 변수 입력, `/actuator/health` 확인, Flyway V2 초기 데이터, Testcontainers 전체 테스트와 `bootJar` 절차를 작성한다.
   - `MYSQL_PORT=3307`, `SERVER_PORT=18080` 같은 개인 로컬 오버라이드는 지원하되 저장소 기본값이나 애플리케이션 설정을 개인 포트로 바꾸지 않는다.
   - 실제 Controller·DTO와 V2 초기 데이터에 맞춘 `curl.exe` 메뉴 조회·포인트 충전·주문·인기 메뉴 예시와 멱등 키 재사용 주의사항을 작성한다.
