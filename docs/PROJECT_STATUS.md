@@ -6,12 +6,11 @@
 
 ## 현재 작업
 
-- 현재 Plan의 IN_PROGRESS 작업: [DOC-03](IMPLEMENTATION_PLAN.md)
-- 최근 제출 기록: [S15-01](IMPLEMENTATION_RECORDS.md) 전체 테스트·보안정보·공개 저장소 제출 검증
-- 현재 작업: S15 병합 뒤 최종 인수인계 상태 정리
-- 작업 링크: [issue #37](https://github.com/usersy628/coffee-order-system/issues/37)
-- 이전 제출 기록: [S14-01](IMPLEMENTATION_RECORDS.md) 구현 과정의 TIL 트러블슈팅
+- 현재 Plan의 IN_PROGRESS 작업: 없음
+- 최근 제출 기록: [DOC-03](IMPLEMENTATION_RECORDS.md) S15 병합 뒤 최종 인수인계 상태 정리
+- 완료 단계 링크: [S15-01 PR #36](https://github.com/usersy628/coffee-order-system/pull/36)
+- 이전 제출 기록: [S15-01](IMPLEMENTATION_RECORDS.md) 전체 테스트·보안정보·공개 저장소 제출 검증
 
 ## 다음 행동
 
-DOC-03에서 Project Status를 최종 인수인계 내용으로 갱신하고, 링크·형식 검증 뒤 `dev` 대상 PR을 만든다.
+새 요구사항 또는 설계 변경이 생기면 README를 단일 기준으로 확인하고 GitHub 이슈를 먼저 만든 뒤, 최신 `dev`에서 Plan을 READY로 구체화한다.

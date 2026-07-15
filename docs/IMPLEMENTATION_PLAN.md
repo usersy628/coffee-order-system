@@ -48,7 +48,7 @@ READY가 아닌 작업은 구현하지 않는다. RECORDED는 완료 판정이 �
 | --- | --- | --- | --- | --- |
 | [DOC-01](https://github.com/usersy628/coffee-order-system/issues/25) | DONE | PR #24 병합 | 활성 계획과 완료 이력 분리, 인수인계와 PR 본문 규칙 정합성 보완 | 문서 역할·링크·상태가 일치하고 PR 본문 UTF-8 검증 성공 |
 | [DOC-02](https://github.com/usersy628/coffee-order-system/issues/31) | RECORDED | S11 제출 결과 확인 | PR lifecycle과 문서 상태 기준 분리, 불변 제출 기록 도입 | [IMPLEMENTATION_RECORDS.md](IMPLEMENTATION_RECORDS.md)의 제출 기록과 연결 PR에서 검증 |
-| [DOC-03](https://github.com/usersy628/coffee-order-system/issues/37) | IN_PROGRESS | S15-01 제출 기록과 연결 GitHub PR 확인 | S15 병합 뒤 최종 인수인계 상태 정리 | Project Status가 현재 작업 없음과 새 요구사항의 이슈 우선 시작 절차를 안내하고 링크·형식 검증 성공 |
+| [DOC-03](https://github.com/usersy628/coffee-order-system/issues/37) | RECORDED | S15-01 제출 기록과 연결 GitHub PR 확인 | S15 병합 뒤 최종 인수인계 상태 정리 | [IMPLEMENTATION_RECORDS.md](IMPLEMENTATION_RECORDS.md)의 제출 기록과 연결 PR에서 검증 |
 | [S5-01](https://github.com/usersy628/coffee-order-system/issues/1) | DONE | 4단계 설계 완료 | 기술 스택·패키지 구조·설정 및 테스트 구성 추천안과 승인 | 선택 사항이 문서화되고 사용자가 승인함 |
 | [S5-02](https://github.com/usersy628/coffee-order-system/issues/2) | DONE | S5-01 | Spring Boot·빌드 도구 기본 구조, traceId·공통 오류 기반과 MySQL Testcontainers 환경 | 기본 컨텍스트·공통 예외 smoke test·MySQL smoke 테스트와 빌드 성공 |
 | [S5-03](https://github.com/usersy628/coffee-order-system/issues/17) | DONE | S5-02 | 리뷰 후속 공통 MVC 오류·Flyway 재실행 검증·PR CI 기반 보완 | 4xx 계약·migration 재실행·GitHub Actions 검증 성공 |
@@ -69,62 +69,7 @@ S9-01과 S10-01은 모두 S8-01만 직접 선행하므로 서로 독립적으로
 
 ## 준비·진행 중인 작업 상세
 
-현재 IN_PROGRESS 작업은 DOC-03 하나다. DOC-02, S11-01, S12-01, S13-01, S14-01과 S15-01의 계획·구현·검증 상세는 [IMPLEMENTATION_RECORDS.md](IMPLEMENTATION_RECORDS.md)에 보존한다. 후속 작업 전에는 연결한 GitHub PR의 라이브 상태를 확인한다.
-
-### [DOC-03](https://github.com/usersy628/coffee-order-system/issues/37) S15 병합 뒤 최종 인수인계 상태를 정리한다
-
-- 상태: IN_PROGRESS
-- 목적: S15-01 제출 PR의 병합 뒤에도 남아 있는 검토·병합 대기 인수인계를 현재 저장소의 다음 작업 기준과 일치시키되, GitHub 라이브 상태를 정적 문서에 복사하지 않는다.
-- 요구사항 근거:
-  - [AGENTS.md의 상태 인수인계 규칙](../AGENTS.md#상태-인수인계)
-  - [README.md의 다음 단계](../README.md#다음-단계)
-  - [issue #37](https://github.com/usersy628/coffee-order-system/issues/37)
-- 선행 작업: S15-01 제출 기록과 [PR #36](https://github.com/usersy628/coffee-order-system/pull/36)의 GitHub 상태를 확인한다.
-- 대상 파일:
-  - docs/IMPLEMENTATION_PLAN.md
-  - docs/PROJECT_STATUS.md
-  - docs/IMPLEMENTATION_RECORDS.md (PR URL 생성 뒤 PR_SUBMISSION 기록 이관 시)
-- 먼저 수행할 테스트 또는 검증:
-  1. [PR #36](https://github.com/usersy628/coffee-order-system/pull/36)과 [issue #12](https://github.com/usersy628/coffee-order-system/issues/12)의 GitHub 상태를 확인하고, Project Status의 다음 행동과 불일치하는지 대조한다.
-  2. README의 다음 단계와 Plan의 READY·IN_PROGRESS 작업을 읽어 새 기능 또는 설계 작업이 남아 있지 않은지 확인한다.
-  3. Project Status와 Records의 링크가 저장소 안에서 해석되고, S15 PR_SUBMISSION 스냅샷을 수정하지 않는지 확인한다.
-- 구현 범위:
-  - Project Status를 현재 Plan 작업 없음, S15 제출 기록과 연결 PR, 새 요구사항 발생 시 이슈 우선·README 기준 Plan READY 준비라는 한 가지 다음 행동으로 짧게 갱신한다.
-  - 첫 PR 전에는 이 상세를 Plan에 유지하고, PR URL이 생기면 실제 결과·계획 대비 변경·검증 결과와 함께 Records로 이관한다.
-- 제외 범위:
-  - S15 또는 이전 PR_SUBMISSION 기록의 GitHub 상태·merge commit·CI 결과를 맞추기 위한 수정
-  - README의 제품 요구사항·ERD·API 계약·구현 또는 설정 변경
-  - 새 기능, 새 설계 또는 사용자가 정하지 않은 후속 마일스톤 생성
-- 완료 조건:
-  - Project Status가 현재 작업 없음, 최근 S15 제출 기록과 연결 PR, 새 요구사항을 이슈 우선으로 시작하는 한 가지 다음 행동만 담는다.
-  - 정적 문서가 PR·issue의 열린/닫힌 상태, CI 실행 시간 또는 merge commit을 복사하지 않는다.
-  - 상대 링크 검사와 `git diff --check`가 성공한다.
-- 검증 명령:
-
-    git status --short --branch
-    gh pr view 36 --repo usersy628/coffee-order-system --json state,mergedAt,url
-    gh issue view 12 --repo usersy628/coffee-order-system --json state,closedAt,url
-    $files = @('docs/IMPLEMENTATION_PLAN.md', 'docs/PROJECT_STATUS.md', 'docs/IMPLEMENTATION_RECORDS.md'); foreach ($file in $files) { $content = Get-Content -Raw -Encoding UTF8 $file; $parent = Split-Path $file -Parent; foreach ($match in [regex]::Matches($content, '\[[^\]]+\]\((?!https?://|#)([^)#]+)(?:#[^)]+)?\)')) { if (-not (Test-Path -LiteralPath (Join-Path $parent $match.Groups[1].Value))) { throw "Broken relative link: $file -> $($match.Groups[1].Value)" } } }
-    git diff --check
-
-#### 실제 구현 결과
-
-- S15의 연결 PR과 issue를 GitHub에서 확인해 Project Status의 이전 검토·병합 대기 안내가 현재 인수인계와 맞지 않음을 확인했다.
-- Project Status를 DOC-03 작업 기준으로 갱신해 현재 작업, 최근 제출 기록, 이슈 링크와 다음 PR 준비 행동만 짧게 남겼다.
-- S15와 이전 작업의 PR_SUBMISSION 기록, README의 요구사항·설계와 구현·설정은 수정하지 않았다.
-
-#### 계획 대비 변경
-
-- 없음
-
-#### 실제 검증 결과
-
-| 검증 명령 또는 확인 | 결과 |
-| --- | --- |
-| PR #36과 issue #12 GitHub 조회 | 성공. Project Status의 이전 다음 행동과의 불일치를 확인 |
-| README 다음 단계와 Plan 작업 목록 대조 | 성공. 새 기능·설계 작업 없이 DOC-03만 진행 상태임을 확인 |
-| Project Status·Plan·Records 상대 링크 검사 | 성공 |
-| `git diff --check` | 성공 |
+현재 IN_PROGRESS 작업은 없다. DOC-02, DOC-03, S11-01, S12-01, S13-01, S14-01과 S15-01의 계획·구현·검증 상세는 [IMPLEMENTATION_RECORDS.md](IMPLEMENTATION_RECORDS.md)에 보존한다. 후속 작업 전에는 연결한 GitHub PR의 라이브 상태를 확인한다.
 
 ## 작업 상세 템플릿
 
