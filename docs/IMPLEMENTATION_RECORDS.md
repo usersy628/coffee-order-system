@@ -78,21 +78,46 @@
 
     $clonePath = Join-Path ([IO.Path]::GetTempPath()) ("coffee-order-system-s15-" + [guid]::NewGuid().ToString("N"))
     $composeProject = "coffee-order-system-s15-" + [guid]::NewGuid().ToString("N").Substring(0, 8)
-    git clone --branch feature/issue-12-final-submission-verification --single-branch https://github.com/usersy628/coffee-order-system.git $clonePath
-    Push-Location $clonePath
-    .\gradlew.bat clean test --no-daemon --rerun-tasks
-    .\gradlew.bat bootJar --no-daemon
-    $files = Get-ChildItem build\test-results\test\TEST-*.xml; $tests = 0; $failures = 0; $errors = 0; foreach ($file in $files) { [xml]$xml = Get-Content -Raw $file.FullName; $tests += [int]$xml.testsuite.tests; $failures += [int]$xml.testsuite.failures; $errors += [int]$xml.testsuite.errors }; if ($failures -ne 0 -or $errors -ne 0) { throw "JUnit failures=$failures errors=$errors" }; "JUnit XML: files=$($files.Count) tests=$tests failures=$failures errors=$errors"
-    $env:COMPOSE_PROJECT_NAME = $composeProject; $env:MYSQL_PORT = "3309"; $env:MYSQL_DATABASE = "coffee_order"; $env:MYSQL_USER = "coffee"; $env:MYSQL_PASSWORD = "coffee-local"; $env:MYSQL_ROOT_PASSWORD = "root-local"; $env:SERVER_PORT = "18082"; $env:SPRING_PROFILES_ACTIVE = "local"
-    docker compose --env-file .env.example -f compose.yaml up -d --wait
-    $app = Start-Process -FilePath java -ArgumentList "-jar", "build/libs/coffee-order-system-0.0.1-SNAPSHOT.jar" -PassThru -WindowStyle Hidden -RedirectStandardOutput (Join-Path $clonePath "s15-app.out.log") -RedirectStandardError (Join-Path $clonePath "s15-app.err.log")
-    $health = $null; for ($attempt = 1; $attempt -le 60 -and $null -eq $health; $attempt++) { try { $health = Invoke-RestMethod -Uri "http://127.0.0.1:18082/actuator/health" -TimeoutSec 2 } catch { Start-Sleep -Seconds 1 } }; if ($health.status -ne "UP") { throw "Application health smoke failed" }
-    Stop-Process -Id $app.Id -ErrorAction SilentlyContinue
-    docker compose --env-file .env.example -f compose.yaml down -v
-    Pop-Location
-    $resolvedClone = [IO.Path]::GetFullPath($clonePath); $resolvedTemp = [IO.Path]::GetFullPath([IO.Path]::GetTempPath()); if (-not $resolvedClone.StartsWith($resolvedTemp, [StringComparison]::OrdinalIgnoreCase) -or -not (Split-Path $resolvedClone -Leaf).StartsWith("coffee-order-system-s15-")) { throw "Unsafe cleanup path: $resolvedClone" }; Remove-Item -LiteralPath $resolvedClone -Recurse -Force
+    $app = $null
+    $locationPushed = $false
+    $composeAttempted = $false
+    $appStillRunning = $false
+    $composeCleanupFailed = $false
+    try {
+        git clone --branch feature/issue-12-final-submission-verification --single-branch https://github.com/usersy628/coffee-order-system.git $clonePath
+        if ($LASTEXITCODE -ne 0) { throw "Clone failed" }
+        Push-Location $clonePath
+        $locationPushed = $true
+        .\gradlew.bat clean test --no-daemon --rerun-tasks
+        if ($LASTEXITCODE -ne 0) { throw "Gradle test failed" }
+        .\gradlew.bat bootJar --no-daemon
+        if ($LASTEXITCODE -ne 0) { throw "bootJar failed" }
+        $files = Get-ChildItem build\test-results\test\TEST-*.xml; $tests = 0; $failures = 0; $errors = 0; foreach ($file in $files) { [xml]$xml = Get-Content -Raw $file.FullName; $tests += [int]$xml.testsuite.tests; $failures += [int]$xml.testsuite.failures; $errors += [int]$xml.testsuite.errors }; if ($failures -ne 0 -or $errors -ne 0) { throw "JUnit failures=$failures errors=$errors" }; "JUnit XML: files=$($files.Count) tests=$tests failures=$failures errors=$errors"
+        $env:COMPOSE_PROJECT_NAME = $composeProject; $env:MYSQL_PORT = "3309"; $env:MYSQL_DATABASE = "coffee_order"; $env:MYSQL_USER = "coffee"; $env:MYSQL_PASSWORD = "coffee-local"; $env:MYSQL_ROOT_PASSWORD = "root-local"; $env:SERVER_PORT = "18082"; $env:SPRING_PROFILES_ACTIVE = "local"
+        $composeAttempted = $true
+        docker compose --env-file .env.example -f compose.yaml up -d --wait
+        if ($LASTEXITCODE -ne 0) { throw "Compose startup failed" }
+        $app = Start-Process -FilePath java -ArgumentList "-jar", "build/libs/coffee-order-system-0.0.1-SNAPSHOT.jar" -PassThru -WindowStyle Hidden -RedirectStandardOutput (Join-Path $clonePath "s15-app.out.log") -RedirectStandardError (Join-Path $clonePath "s15-app.err.log")
+        $health = $null; for ($attempt = 1; $attempt -le 60 -and $null -eq $health; $attempt++) { try { $health = Invoke-RestMethod -Uri "http://127.0.0.1:18082/actuator/health" -TimeoutSec 2 } catch { Start-Sleep -Seconds 1 } }; if ($health.status -ne "UP") { throw "Application health smoke failed" }
+    } finally {
+        if ($null -ne $app) {
+            if (-not $app.HasExited) { Stop-Process -Id $app.Id -ErrorAction SilentlyContinue }
+            Wait-Process -Id $app.Id -Timeout 15 -ErrorAction SilentlyContinue
+            $app.Refresh()
+            if (-not $app.HasExited) { Stop-Process -Id $app.Id -Force -ErrorAction SilentlyContinue; Wait-Process -Id $app.Id -Timeout 15 -ErrorAction SilentlyContinue; $app.Refresh() }
+            $appStillRunning = -not $app.HasExited
+        }
+        if ($locationPushed) {
+            if ($composeAttempted) { docker compose --env-file .env.example -f compose.yaml down -v; $composeCleanupFailed = $LASTEXITCODE -ne 0 }
+            Pop-Location
+        }
+        $resolvedClone = [IO.Path]::GetFullPath($clonePath); $resolvedTemp = [IO.Path]::GetFullPath([IO.Path]::GetTempPath()); if (-not $resolvedClone.StartsWith($resolvedTemp, [StringComparison]::OrdinalIgnoreCase) -or -not (Split-Path $resolvedClone -Leaf).StartsWith("coffee-order-system-s15-")) { throw "Unsafe cleanup path: $resolvedClone" }
+        if (Test-Path -LiteralPath $resolvedClone) { for ($attempt = 1; $attempt -le 5; $attempt++) { try { Remove-Item -LiteralPath $resolvedClone -Recurse -Force -ErrorAction Stop; break } catch { if ($attempt -eq 5) { throw }; Start-Sleep -Seconds 1 } } }
+        if ($appStillRunning) { throw "Application process $($app.Id) did not exit" }
+        if ($composeCleanupFailed) { throw "Compose cleanup failed for $composeProject" }
+    }
 
-  smoke 실패 시에도 같은 경로·project 검증을 거친 뒤 생성한 애플리케이션 프로세스와 `$composeProject`만 정리한다. 로그는 원문 비밀값을 문서에 복사하지 않고 실패 원인 확인에만 사용한다.
+  `finally`에서 성공·실패와 무관하게 생성한 애플리케이션 프로세스의 종료를 기다리고, 필요하면 해당 PID만 강제 종료한 뒤 `$composeProject`를 내린다. 검증된 임시 clone은 잠긴 파일 핸들 해제를 고려해 최대 5회 재시도하여 삭제한다. 로그는 원문 비밀값을 문서에 복사하지 않고 실패 원인 확인에만 사용한다.
 
 #### 실제 구현 결과
 
@@ -107,6 +132,7 @@
 
 - 고신뢰 비밀 패턴이 하이픈으로 시작할 때 `git grep`이 옵션으로 오인하는 것을 최종 스냅샷 재검사에서 발견했다. 패턴을 `-e`로 명시하고 exit code 2 이상의 실행 오류를 실패 처리하도록 검증 명령을 보완한 뒤 현재 스냅샷과 전체 reachable history를 다시 검사했다.
 - Windows에서 smoke 프로세스 종료 직후 JAR 핸들 해제가 지연되어, 해당 실행 시각의 Java 프로세스를 확인·종료한 뒤 검증된 임시 경로 정리를 재시도했다. 두 조정 모두 검증 신뢰성과 정리 절차를 보완했으며 대상 파일·완료 조건은 바뀌지 않았다.
+- 별도 검토에서 health 실패 시 정리를 건너뛰고 정상 경로에서도 프로세스 종료를 기다리지 않는 문제가 지적됐다. smoke 절차를 `try/finally`로 바꾸고 `Wait-Process`, 해당 PID의 강제 종료 fallback, Compose 정리와 임시 clone 삭제 재시도를 명시했다.
 
 #### 실제 검증 결과
 
