@@ -2,50 +2,52 @@
 
 ## 작업 시작
 
-1. `docs/PROJECT_STATUS.md`에서 현재 작업을 확인하고, 미완료 작업은 `docs/IMPLEMENTATION_PLAN.md`, 완료 작업은 `docs/IMPLEMENTATION_HISTORY.md`의 해당 상세와 그 작업이 참조하는 `README.md` 섹션을 읽는다. 설계 전체를 검토하거나 변경할 때는 `README.md` 전체를 읽는다.
+1. docs/PROJECT_STATUS.md에서 현재 인수인계와 다음 한 가지 행동을 확인한다. 아직 PR을 만들지 않은 작업은 docs/IMPLEMENTATION_PLAN.md의 상세를, RECORDED 작업은 docs/IMPLEMENTATION_RECORDS.md의 제출 기록을 읽고 해당 작업이 참조하는 README.md 섹션을 읽는다. 설계 전체를 검토하거나 변경할 때는 README.md 전체를 읽는다.
 2. 이전 대화의 설명만 신뢰하지 말고 다음 명령으로 실제 저장소 상태를 확인한다.
-   - `git status --short --branch`
-   - `git branch -vv`
-   - `git remote -v`
-   - `git log --oneline -5`
-   - GitHub CLI 작업이 필요하면 `gh auth status`
-3. 문서의 상태와 실제 저장소가 다르면 작업 전에 차이를 알린다.
+   - git status --short --branch
+   - git branch -vv
+   - git remote -v
+   - git log --oneline -5
+   - GitHub CLI 작업이 필요하면 gh auth status
+3. 문서의 정적 기록과 실제 저장소 또는 GitHub의 라이브 상태가 다르면, 작업 전에 차이를 알린다. issue·PR의 열린/닫힌 상태, CI 실행 상태, 병합 여부와 merge commit은 GitHub 링크에서만 판단한다.
 
 ## 개발 흐름
 
-- 기본 개발 브랜치는 `dev`이다.
-- 모든 작업은 대응하는 GitHub 이슈를 먼저 만든 뒤 최신 `dev`에서 `feature/issue-<번호>-<slug>` 브랜치를 생성하여 수행한다.
-- 아직 시작하지 않은 이슈의 브랜치는 미리 만들지 않는다. 한 브랜치는 한 이슈만 다루고, 후속 작업은 선행 브랜치가 `dev`에 병합된 뒤 새 브랜치에서 시작한다.
+- 기본 개발 브랜치는 dev이다.
+- 모든 작업은 대응하는 GitHub 이슈를 먼저 만든 뒤 최신 dev에서 feature/issue-<번호>-<slug> 브랜치를 생성하여 수행한다.
+- 아직 시작하지 않은 이슈의 브랜치는 미리 만들지 않는다. 한 브랜치는 한 이슈만 다루고, 후속 작업은 선행 브랜치가 dev에 병합된 뒤 새 브랜치에서 시작한다.
 - 설계 승인이 끝나기 전에는 해당 설계의 구현으로 넘어가지 않는다.
-- 기능 또는 문서 단계별로 작고 의미 있는 커밋을 작업 브랜치에 만든 뒤 원격에 push하고 `dev` 대상 PR로 검토·병합한다.
-- PR 본문에는 대응 이슈를 `Closes #<번호>`로 연결한다.
-- PR을 만들기 전에 해당 작업의 제목부터 검증 명령까지의 작업 상세 전체를 `Implementation Plan 작업 상세` 섹션에 복사한다. 작업 진행 중에는 `docs/IMPLEMENTATION_PLAN.md`를 사용하고, 같은 PR의 최종 문서 커밋에서 `DONE` 상세를 `docs/IMPLEMENTATION_HISTORY.md`로 옮겼다면 History의 전체 상세를 사용한다. 빈 작업 상세 템플릿이나 요약문으로 대체하지 않는다.
-- 작업 상세 뒤에는 실제 구현 결과, 계획 대비 변경 사항과 실제 검증 명령·결과를 기록한다. 계획 대비 변경이 없으면 `없음`이라고 명시하고, 대상 파일·범위·완료 조건이 달라졌다면 Implementation Plan도 같은 PR에서 먼저 갱신한다.
-- `.github/pull_request_template.md`의 순서와 항목을 사용하며, placeholder를 실제 내용으로 교체한 뒤 `dev` 대상 PR을 만든다. `dev`에 직접 push하지 않는다.
-- GitHub 이슈와 PR의 한글 본문은 UTF-8 파일을 만든 뒤 `gh issue create --body-file`, `gh pr create --body-file` 또는 `gh pr edit --body-file`로 전달한다. 인라인 `--body`와 파이프 입력은 사용하지 않는다. 생성·수정 직후 `gh issue view --json title,body` 또는 `gh pr view --json title,body`로 한글 제목과 예상하지 않은 리터럴 `?` 손실 여부를 확인한다.
+- 기능 또는 문서 단계별로 작고 의미 있는 커밋을 작업 브랜치에 만든 뒤 원격에 push하고 dev 대상 PR로 검토·병합한다.
+- PR의 첫 제출 본문은 대응 이슈를 Refs #<번호>로 연결한다. 아직 사용자 병합 승인이 없는 제출이 이슈를 자동 종료하지 않게 한다.
+- PR을 만들기 전에 해당 작업의 제목부터 검증 명령까지의 작업 상세 전체를 Implementation Plan 작업 상세 섹션에 복사한다. 빈 작업 상세 템플릿이나 요약문으로 대체하지 않는다.
+- PR URL이 생기면 같은 브랜치의 최종 문서 커밋에서 그 전체 상세, 실제 구현 결과, 계획 대비 변경과 실제 검증 결과를 docs/IMPLEMENTATION_RECORDS.md에 PR_SUBMISSION 기록으로 옮긴다. IMPLEMENTATION_PLAN.md에는 상세를 남기지 않고 표의 상태를 RECORDED로 바꾼다. 새 기록에는 GitHub의 현재 상태·CI 실행 시간·merge commit을 적지 않는다.
+- 별도 검토와 사용자의 명시적 병합 승인이 모두 있으면, 병합 직전에 UTF-8 본문 파일로 PR 본문의 Refs #<번호>만 Closes #<번호>로 바꾸고 검증한 뒤에만 병합한다.
+- 작업 상세 뒤에는 실제 구현 결과, 계획 대비 변경 사항과 실제 검증 명령·결과를 기록한다. 계획 대비 변경이 없으면 없음이라고 명시하고, 대상 파일·범위·완료 조건이 달라졌다면 Implementation Plan도 같은 PR에서 먼저 갱신한다.
+- .github/pull_request_template.md의 순서와 항목을 사용하며, placeholder를 실제 내용으로 교체한 뒤 dev 대상 PR을 만든다. dev에 직접 push하지 않는다.
+- GitHub 이슈와 PR 본문은 UTF-8 파일로 만든 뒤 gh issue create --body-file, gh pr create --body-file 또는 gh pr edit --body-file로 전달한다. 인라인 --body와 파이프 입력은 사용하지 않는다. 생성·수정 직후 gh issue view --json title,body 또는 gh pr view --json title,body로 한글 제목과 예상하지 않은 리터럴 ? 손실 여부를 확인한다.
 - PR 생성과 필수 CI 성공 후에도 자동 병합하지 않는다. 열린 PR의 URL, 검증 결과와 검토가 필요한 지점을 사용자에게 알리고 검토 대기 상태로 인수인계한다.
-- CI 결과는 check 이름과 성공·실패 상태를 기록한다. 후속 커밋마다 달라지는 실행 시간이나 특정 head 해시는 성능 검증의 완료 조건이 아닌 한 저장소 문서와 PR 본문에 고정하지 않는다.
+- CI 결과에는 check 이름과 성공·실패 상태만 기록한다. 이어지는 커밋마다 달라지는 실행 시간이나 특정 head 해시는 성능 검증의 완료 조건이 아닌 한 저장소 문서와 PR 본문에 고정하지 않는다.
 - 열린 PR은 별도 검토자가 검토하고, 지적 사항이 있으면 같은 작업 브랜치에 반영한 뒤 관련 테스트와 필수 CI를 다시 통과시킨다.
-- 사용자가 해당 PR을 명시적으로 병합 승인한 경우에만 `dev`에 병합한다. 구현 요청, `다음 작업 진행` 같은 일반적인 진행 요청, PR 생성 요청이나 CI 성공은 병합 승인으로 해석하지 않는다.
+- 사용자가 해당 PR을 명시적으로 병합 승인한 경우에만 dev에 병합한다. 구현 요청, 다음 작업 진행 같은 일반적인 진행 요청, PR 생성 요청이나 CI 성공은 병합 승인으로 해석하지 않는다.
 - 사용자의 기존 변경과 관련 없는 파일은 수정하거나 커밋하지 않는다.
 - 초보자가 따라갈 수 있도록 변경 이유와 다음 확인 신호를 설명한다.
 - 사용자 의견에 모순, 누락 또는 모호함이 있으면 근거와 대안을 제시한다.
 
 ## 구현 작업 관리
 
-- 제품 요구사항과 설계의 단일 기준은 `README.md`이다. 구현 계획과 완료 이력 문서에 ERD, API 계약 또는 정책을 복사하지 않고 해당 위치를 참조한다.
-- 구현은 `docs/IMPLEMENTATION_PLAN.md`에서 `READY`인 작업만 시작한다.
-- 작업을 `READY`로 바꾸기 전에 선행 작업, 수정할 정확한 파일 경로, 먼저 수행할 테스트 또는 검증, 완료 확인 명령을 기록한다.
-- 동시에 `IN_PROGRESS`인 작업은 하나만 둔다.
+- 제품 요구사항과 설계의 단일 기준은 README.md이다. 구현 계획·제출 기록 문서에 ERD, API 계약 또는 정책을 복사하지 않고 해당 위치를 참조한다.
+- 구현은 docs/IMPLEMENTATION_PLAN.md에서 READY인 작업만 시작한다.
+- 작업을 READY로 바꾸기 전에 선행 작업, 수정할 정확한 파일 경로, 먼저 수행할 테스트 또는 검증, 완료 확인 명령을 기록한다.
+- 동시에 IN_PROGRESS인 작업은 하나만 둔다.
 - 기능 작업은 가능한 경우 실패하는 테스트를 먼저 확인하고, 구현 후 해당 테스트와 관련 통합 테스트를 통과시킨다.
-- 작업 완료 후 검증 결과를 확인하고 작은 커밋으로 작업 브랜치에 push한 뒤 `dev` 대상 PR을 만든다.
-- 작업을 완료하는 PR의 최종 문서 커밋에서는 해당 상세를 `docs/IMPLEMENTATION_PLAN.md`에서 `docs/IMPLEMENTATION_HISTORY.md`로 옮기고 issue, PR, 완료일, 실제 검증 결과를 기록한다. PR 생성 전에는 merge commit을 `병합 후 기록`으로 두며, 명시적 병합 승인 후 다음 상태 갱신에서 실제 해시로 교체한다.
+- 작업 완료 후 검증 결과를 확인하고 작은 커밋으로 작업 브랜치에 push한 뒤 dev 대상 PR을 만든다.
+- PR URL이 생긴 뒤 같은 브랜치의 최종 문서 커밋에서 해당 상세를 docs/IMPLEMENTATION_RECORDS.md로 옮긴다. 제출 기록은 구현·검증의 불변 스냅샷이며, 이후 GitHub 상태를 맞추기 위해 수정하지 않는다. docs/IMPLEMENTATION_HISTORY.md는 DOC-02 이전 완료 이력만 보존하는 legacy archive다.
 
 ## 상태 인수인계
 
-- 단계 완료, 중요 결정 확정 또는 새 작업으로 인수인계할 때만 `docs/PROJECT_STATUS.md`를 갱신한다.
-- 완료 작업에는 확인 가능한 커밋 해시를 기록한다.
-- 현재 작업 ID와 다음 작업은 새 작업에서 바로 실행할 수 있는 한 가지 구체적인 행동으로 적는다.
+- 단계 완료, 중요 결정 확정 또는 새 작업으로 인수인계할 때만 docs/PROJECT_STATUS.md를 갱신한다.
+- docs/PROJECT_STATUS.md에는 현재 작업, 관련 기록 또는 GitHub 링크와 새 작업에서 바로 실행할 수 있는 다음 한 가지 행동만 짧게 적는다.
+- 이 문서에는 issue·PR의 열린/닫힌 상태, CI 상태, merge commit 같은 라이브 값을 복사하지 않는다. 검토자와 후속 작업자는 링크한 GitHub 화면에서 확인한다.
 - 대화 내용보다 저장소 파일과 실제 Git 상태를 기준으로 삼는다.
 
 ## 보안
