@@ -62,13 +62,88 @@ READY가 아닌 작업은 구현하지 않는다. RECORDED는 완료 판정이 �
 | [S12-01](https://github.com/usersy628/coffee-order-system/issues/9) | RECORDED | S6-01, S7-01, S8-01, S9-01, S10-01, S11-01 | 전역 예외 매핑·traceId·로그와 API 계약 정합성 최종 보강 | [IMPLEMENTATION_RECORDS.md](IMPLEMENTATION_RECORDS.md)의 제출 기록과 연결 PR에서 검증 |
 | [S13-01](https://github.com/usersy628/coffee-order-system/issues/10) | RECORDED | S12-01 | README 실행 방법과 구현 근거 보강 | [IMPLEMENTATION_RECORDS.md](IMPLEMENTATION_RECORDS.md)의 제출 기록과 연결 PR에서 검증 |
 | [S14-01](https://github.com/usersy628/coffee-order-system/issues/11) | RECORDED | S6-01, S7-01, S8-01, S9-01, S10-01, S11-01, S12-01 | 구현 중 수시 기록한 내용을 정리한 TIL 트러블슈팅 문서 | [IMPLEMENTATION_RECORDS.md](IMPLEMENTATION_RECORDS.md)의 제출 기록과 연결 PR에서 검증 |
-| [S15-01](https://github.com/usersy628/coffee-order-system/issues/12) | BACKLOG | S13-01, S14-01 | 전체 테스트·보안정보·공개 저장소 제출 검증 | 깨끗한 clone 기준 빌드와 전체 테스트 성공 |
+| [S15-01](https://github.com/usersy628/coffee-order-system/issues/12) | READY | S13-01, S14-01 | 전체 테스트·보안정보·공개 저장소 제출 검증 | 공개 원격의 깨끗한 clone에서 전체 테스트·패키징·실행 smoke가 성공하고 보안정보·불필요한 산출물이 없음 |
 
 S9-01과 S10-01은 모두 S8-01만 직접 선행하므로 서로 독립적으로 진행할 수 있다. MySQL Testcontainers 기반은 S5-02에서 만들고 S5-03에서 migration 재실행 검증을 보강한 뒤 각 기능 단계에서 사용한다. S11-01의 상세는 제출 기록으로 이동했으므로, S12-01을 시작하기 전에는 정적 기록과 연결한 GitHub PR을 함께 확인한다.
 
 ## 준비·진행 중인 작업 상세
 
-현재 IN_PROGRESS 작업은 없다. DOC-02, S11-01, S12-01, S13-01과 S14-01의 계획·구현·검증 상세는 [IMPLEMENTATION_RECORDS.md](IMPLEMENTATION_RECORDS.md)에 보존한다. 다음 기능 작업을 시작하기 전에는 연결한 GitHub PR의 라이브 상태를 확인한다.
+현재 IN_PROGRESS 작업은 없다. DOC-02, S11-01, S12-01, S13-01과 S14-01의 계획·구현·검증 상세는 [IMPLEMENTATION_RECORDS.md](IMPLEMENTATION_RECORDS.md)에 보존한다. S15-01은 아래 상세에 따라 검증을 시작할 수 있다.
+
+### [S15-01](https://github.com/usersy628/coffee-order-system/issues/12) 전체 테스트·보안정보·공개 저장소 제출 상태를 검증한다
+
+- 상태: READY
+- 목적: 공개 원격에서 새로 받은 평가 환경도 저장소 문서만으로 프로젝트를 빌드·테스트·실행할 수 있고, 현재 스냅샷과 Git 이력에 보안정보나 불필요한 산출물이 포함되지 않았음을 최종 확인한다.
+- 요구사항 근거:
+  - [README.md의 설정, 초기 데이터와 테스트 구성](../README.md#설정-초기-데이터와-테스트-구성)
+  - [README.md의 실행 가이드](../README.md#실행-가이드)
+  - [README.md의 테스트 전략](../README.md#테스트-전략)
+  - [README.md의 다음 단계](../README.md#다음-단계)
+  - [issue #12](https://github.com/usersy628/coffee-order-system/issues/12)
+- 선행 작업: S13-01과 S14-01이 제출 기록으로 보존됐고, PR #34와 PR #35가 반영된 최신 `origin/dev`를 기준으로 한다.
+- 작업 브랜치: feature/issue-12-final-submission-verification
+- 대상 파일:
+  - README.md
+  - docs/IMPLEMENTATION_PLAN.md
+  - docs/PROJECT_STATUS.md
+  - docs/IMPLEMENTATION_RECORDS.md (PR URL 생성 뒤 PR_SUBMISSION 기록 이관 시)
+- 먼저 수행할 테스트 또는 검증:
+  1. `git status --short --branch`, `git log --oneline -5`, `git remote -v`와 GitHub 저장소 메타데이터를 확인해 작업 기준이 최신 공개 `dev`이고 기본 브랜치가 `dev`인지 확인한다.
+  2. `git ls-files`와 전체 Git 이력을 대상으로 비밀 키 표식·고신뢰 토큰 형식·자격 증명 파일명·빌드 및 IDE 산출물을 검사한다. 매칭된 비밀 문자열 자체는 콘솔이나 문서에 출력하지 않고 커밋·파일 경로만 확인한다.
+  3. `.gitignore`, `.env.example`, `application*.yml`, Compose 파일과 GitHub Actions를 대조해 운영 비밀번호가 없고 개발용 예시 값·loopback 바인딩·검증 명령이 README와 일치하는지 확인한다.
+  4. 공개 원격의 S15 브랜치를 새로운 임시 디렉터리에 clone하고, 그 clone에서만 전체 테스트·패키징·애플리케이션 health smoke를 실행한다.
+- 구현 범위:
+  - 현재 추적 파일과 모든 reachable commit을 대상으로 비밀 키, GitHub·AWS·Google·Slack·OpenAI 계열의 고신뢰 토큰 형식과 자격 증명성 파일명을 검사한다.
+  - Gradle·IDE·OS·로컬 환경 산출물이 추적되지 않았고 `gradle/wrapper/gradle-wrapper.jar`만 의도한 JAR 예외인지 확인한다.
+  - 공개 저장소 여부, 기본 브랜치 `dev`, S13·S14 반영 여부, README 실행·테스트 안내와 CI 명령의 정합성을 확인한다.
+  - 공개 원격의 깨끗한 clone에서 `clean test`, `bootJar`, JUnit XML 합계와 실행 JAR 생성을 확인한다.
+  - 고유 Compose project와 기본 로컬 환경과 겹치지 않는 임시 포트를 사용해 MySQL과 패키징된 애플리케이션을 시작하고 `/actuator/health`가 `UP`인지 확인한 뒤 생성한 프로세스·컨테이너만 정리한다.
+  - 검증 완료 뒤 README의 남은 마일스톤 표현, Plan 상태와 Project Status를 최종 제출 단계에 맞게 정리한다.
+- 제외 범위:
+  - Java·DB schema·migration·API·Outbox·성능 설정의 동작 변경
+  - 검증 실패를 숨기기 위한 테스트 비활성화, 예외 처리 또는 결과 문구만의 우회
+  - 사용자의 기존 local MySQL 3307·서버 18080·Docker volume·IntelliJ 설정 변경
+  - 실제 토큰·비밀번호·키의 콘솔 출력 또는 저장소 문서 기록
+  - 검증 중 발견한 새 코드·설정 결함의 무계획 수정. 대상 파일이나 완료 조건이 달라지면 먼저 이 상세를 갱신한다.
+- 완료 조건:
+  - 공개 원격의 깨끗한 clone에서 Gradle Wrapper 검증, 전체 테스트, `bootJar`와 패키징 JAR health smoke가 성공한다.
+  - JUnit XML의 failures와 errors가 0이고 실행 JAR 및 필요한 Wrapper 파일은 존재하며, 빌드·IDE·로컬 환경 산출물은 추적되지 않는다.
+  - 현재 스냅샷과 전체 Git 이력의 고신뢰 비밀 패턴 및 자격 증명성 파일명 검사에 미해결 항목이 없다. 예측 가능한 `.env.example` 개발값은 운영 자격 증명이 아님을 README와 함께 확인한다.
+  - GitHub 저장소는 public이고 기본 브랜치는 `dev`이며, README·Plan·Project Status와 공개 원격의 제출 상태가 모순되지 않는다.
+  - `git diff --check`가 성공하고 검증 결과에는 비밀값, 개인 환경 값, CI 실행 시간 또는 특정 CI head를 고정하지 않는다.
+- 검증 명령:
+
+    git status --short --branch
+    git log --oneline -5
+    git remote -v
+    git ls-files
+    $artifactHits = git ls-files | Where-Object { ($_ -match '(^|/)(build|\.gradle|\.idea|out|work|outputs)/|\.(class|log|iws|iml|ipr)$') -or (($_ -match '\.jar$') -and ($_ -ne 'gradle/wrapper/gradle-wrapper.jar')) }; if ($artifactHits) { $artifactHits; exit 1 }
+    $credentialPaths = git rev-list --objects --all | Where-Object { $_ -match '(^|[ /])(\.env($|\.)|id_(rsa|dsa|ecdsa|ed25519)$|credentials($|\.)|[^/]+\.(pem|key|p12|pfx|jks|keystore)$)' -and $_ -notmatch '\.env\.example$' }; if ($credentialPaths) { $credentialPaths; exit 1 }
+    $secretPattern = '-----BEGIN (RSA |EC |OPENSSH |DSA )?PRIVATE KEY-----|github_pat_[A-Za-z0-9_]{20,}|gh[pousr]_[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16}|AIza[0-9A-Za-z_-]{35}|xox[baprs]-[0-9A-Za-z-]{10,}|sk-(proj-)?[A-Za-z0-9_-]{20,}'
+    $secretHits = git rev-list --all | ForEach-Object { git grep -I -l -E $secretPattern $_ 2>$null }; if ($secretHits) { $secretHits | Sort-Object -Unique; exit 1 }
+    .\gradlew.bat clean test --no-daemon --rerun-tasks
+    .\gradlew.bat bootJar --no-daemon
+    git diff --check
+
+  공개 원격의 깨끗한 clone 검증은 다음 순서로 수행한다. 고유 임시 경로·Compose project와 기존 local/perf 환경에 쓰지 않는 3309·18082 포트를 사용한다.
+
+    $clonePath = Join-Path ([IO.Path]::GetTempPath()) ("coffee-order-system-s15-" + [guid]::NewGuid().ToString("N"))
+    $composeProject = "coffee-order-system-s15-" + [guid]::NewGuid().ToString("N").Substring(0, 8)
+    git clone --branch feature/issue-12-final-submission-verification --single-branch https://github.com/usersy628/coffee-order-system.git $clonePath
+    Push-Location $clonePath
+    .\gradlew.bat clean test --no-daemon --rerun-tasks
+    .\gradlew.bat bootJar --no-daemon
+    $files = Get-ChildItem build\test-results\test\TEST-*.xml; $tests = 0; $failures = 0; $errors = 0; foreach ($file in $files) { [xml]$xml = Get-Content -Raw $file.FullName; $tests += [int]$xml.testsuite.tests; $failures += [int]$xml.testsuite.failures; $errors += [int]$xml.testsuite.errors }; if ($failures -ne 0 -or $errors -ne 0) { throw "JUnit failures=$failures errors=$errors" }; "JUnit XML: files=$($files.Count) tests=$tests failures=$failures errors=$errors"
+    $env:COMPOSE_PROJECT_NAME = $composeProject; $env:MYSQL_PORT = "3309"; $env:MYSQL_DATABASE = "coffee_order"; $env:MYSQL_USER = "coffee"; $env:MYSQL_PASSWORD = "coffee-local"; $env:MYSQL_ROOT_PASSWORD = "root-local"; $env:SERVER_PORT = "18082"; $env:SPRING_PROFILES_ACTIVE = "local"
+    docker compose --env-file .env.example -f compose.yaml up -d --wait
+    $app = Start-Process -FilePath java -ArgumentList "-jar", "build/libs/coffee-order-system-0.0.1-SNAPSHOT.jar" -PassThru -WindowStyle Hidden -RedirectStandardOutput (Join-Path $clonePath "s15-app.out.log") -RedirectStandardError (Join-Path $clonePath "s15-app.err.log")
+    $health = $null; for ($attempt = 1; $attempt -le 60 -and $null -eq $health; $attempt++) { try { $health = Invoke-RestMethod -Uri "http://127.0.0.1:18082/actuator/health" -TimeoutSec 2 } catch { Start-Sleep -Seconds 1 } }; if ($health.status -ne "UP") { throw "Application health smoke failed" }
+    Stop-Process -Id $app.Id -ErrorAction SilentlyContinue
+    docker compose --env-file .env.example -f compose.yaml down -v
+    Pop-Location
+    $resolvedClone = [IO.Path]::GetFullPath($clonePath); $resolvedTemp = [IO.Path]::GetFullPath([IO.Path]::GetTempPath()); if (-not $resolvedClone.StartsWith($resolvedTemp, [StringComparison]::OrdinalIgnoreCase) -or -not (Split-Path $resolvedClone -Leaf).StartsWith("coffee-order-system-s15-")) { throw "Unsafe cleanup path: $resolvedClone" }; Remove-Item -LiteralPath $resolvedClone -Recurse -Force
+
+  smoke 실패 시에도 같은 경로·project 검증을 거친 뒤 생성한 애플리케이션 프로세스와 `$composeProject`만 정리한다. 로그는 원문 비밀값을 문서에 복사하지 않고 실패 원인 확인에만 사용한다.
 
 ## 작업 상세 템플릿
 
