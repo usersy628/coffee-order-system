@@ -7,10 +7,10 @@
 ## 현재 작업
 
 - 현재 Plan의 IN_PROGRESS 작업: 없음
-- 최근 제출 기록: [S14-01](IMPLEMENTATION_RECORDS.md) 구현 과정의 TIL 트러블슈팅
-- 검토 링크: [PR #35](https://github.com/usersy628/coffee-order-system/pull/35)
-- 직전 제출 기록: [S13-01](IMPLEMENTATION_RECORDS.md)의 README 실행 방법과 구현 근거
+- 최근 제출 기록: [S15-01](IMPLEMENTATION_RECORDS.md) 전체 테스트·보안정보·공개 저장소 제출 검증
+- 검토 링크: [PR #36](https://github.com/usersy628/coffee-order-system/pull/36)
+- 이전 제출 기록: [S14-01](IMPLEMENTATION_RECORDS.md) 구현 과정의 TIL 트러블슈팅
 
 ## 다음 행동
 
-PR #35의 GitHub checks와 별도 검토 결과를 확인한다. 검토가 끝나고 사용자가 명시적으로 병합을 승인한 경우에만 UTF-8 본문 파일로 Refs #11을 Closes #11으로 바꿔 검증한 뒤 병합한다.
+[PR #36](https://github.com/usersy628/coffee-order-system/pull/36)의 GitHub Checks와 별도 검토를 확인한다. 검토 완료와 사용자의 명시적 병합 승인이 모두 있으면 UTF-8 본문 파일로 `Refs #12`를 `Closes #12`로 바꾸고 원문을 검증한 뒤 병합한다.
