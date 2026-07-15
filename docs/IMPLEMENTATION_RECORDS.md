@@ -11,6 +11,86 @@
 
 ## PR 제출 기록
 
+### [S12-01](https://github.com/usersy628/coffee-order-system/issues/9) 공통 예외 처리와 API 오류 계약을 최종 보강한다
+
+- 기록 유형: PR_SUBMISSION
+- 기록일: 2026-07-15
+- 제출 브랜치: feature/issue-9-global-error-contract
+- 연결:
+  - 이슈: [#9](https://github.com/usersy628/coffee-order-system/issues/9)
+  - PR: [#33](https://github.com/usersy628/coffee-order-system/pull/33)
+  - 구현 커밋: a048e96
+- 목적: 모든 API가 같은 code, message, details, traceId 오류 응답과 X-Trace-Id 헤더를 사용하게 하고, 일시적 인프라 오류와 구현 결함을 서로 다르게 표현한다.
+- 요구사항 근거:
+  - [README.md의 예외 처리와 추적](../README.md#예외-처리와-추적)
+  - [README.md의 공통 오류 응답](../README.md#공통-규칙)
+  - [README.md의 테스트 전략](../README.md#테스트-전략)
+  - [issue #9](https://github.com/usersy628/coffee-order-system/issues/9)
+- 선행 작업: S6-01부터 S11-01의 API, 재시도 예외, traceId filter와 통합 테스트 기반을 사용한다.
+- 정책:
+  - ErrorCode에 SERVICE_UNAVAILABLE를 추가하고, Spring의 DataAccessResourceFailureException만 503으로 변환한다. 이 범위는 DB 연결·커넥션 풀처럼 일시적으로 사용할 수 없는 인프라 오류에 한정한다.
+  - DataIntegrityViolationException 전체를 409로 바꾸지 않는다. 명령 계층에서 이미 식별한 멱등 유니크 충돌 외의 제약 위반은 catch-all을 통해 500 INTERNAL_SERVER_ERROR로 남긴다.
+  - PointChargeRetryFailureException과 OrderRetryFailureException의 503 CONCURRENT_REQUEST_TIMEOUT 계약은 그대로 둔다. 재시도되지 않은 락 예외나 다른 DataAccessException을 넓게 503으로 바꾸지 않는다.
+  - 4xx는 정보 로그, 재시도 소진과 일시적 인프라 503은 원문 예외 메시지 없이 원인 타입과 traceId만 경고 로그, 예상외 500은 서버 로그에 traceId와 스택을 남긴다. 응답에는 내부 메시지·스택·원문 Idempotency-Key·payload·인증정보를 노출하지 않는다.
+  - TraceIdFilter가 생성한 서버 traceId는 외부 입력을 신뢰하지 않고 오류 body와 X-Trace-Id 헤더에 같은 값으로 표현하며 요청 종료 뒤 MDC에서 제거한다.
+- 대상 파일:
+  - src/main/java/com/usersy628/coffeeorder/global/error/ErrorCode.java
+  - src/main/java/com/usersy628/coffeeorder/global/error/GlobalExceptionHandler.java
+  - src/test/java/com/usersy628/coffeeorder/global/error/GlobalExceptionHandlerTest.java
+  - docs/IMPLEMENTATION_PLAN.md
+  - docs/PROJECT_STATUS.md
+- 먼저 수행한 검증:
+  1. GlobalExceptionHandlerTest에 DataAccessResourceFailureException을 던지는 test endpoint와 503 SERVICE_UNAVAILABLE 기대를 먼저 추가해, 구현 전에는 기존 catch-all의 500 응답으로 실패함을 확인했다.
+  2. DataIntegrityViolationException을 던지는 test endpoint가 409로 오분류되지 않고 안전한 500 응답으로 남는지 확인했다.
+  3. 각 새 오류 응답에서 body traceId와 X-Trace-Id가 같고, 응답 및 503 경고 로그에 테스트용 민감 문자열이 없는지 확인했다.
+- 구현 범위:
+  - SERVICE_UNAVAILABLE 오류 코드와 보수적인 인프라 예외 handler를 추가했다.
+  - 기존 GlobalExceptionHandlerTest에 503 인프라 오류, 500 제약 위반, traceId·응답 비밀값·로그 비밀값 계약을 보강했다.
+  - 기존 validation, domain, retry exhaustion, malformed JSON, Content-Type, endpoint-not-found 계약이 회귀하지 않는지 같은 테스트 클래스와 전체 테스트로 확인했다.
+- 제외 범위:
+  - 오류 코드마다 별도 예외 클래스 생성
+  - DataAccessException 전체, DataIntegrityViolationException 전체 또는 재시도되지 않은 락 예외의 광범위한 503 변환
+  - 재시도 횟수, Hikari 설정, DB schema, API 버전, 오류 응답 형식 변경
+  - 로그 수집 인프라 또는 외부 observability 도입
+- 완료 조건:
+  - DB 연결·리소스 실패는 503 SERVICE_UNAVAILABLE, 재시도 소진은 503 CONCURRENT_REQUEST_TIMEOUT, 예상외 제약 위반은 500 INTERNAL_SERVER_ERROR로 구분된다.
+  - 모든 새 오류 body는 빈 details, 안전한 message, 32자리 서버 traceId를 가지며 X-Trace-Id와 일치한다.
+  - 응답과 일시적 인프라 경고 로그에 테스트용 원문 민감값이 없고, catch-all 500 응답에 내부 예외 정보가 없다.
+  - 기존 전역 오류 테스트와 전체 테스트가 통과하고 bootJar와 git diff --check가 성공한다.
+- 검증 명령:
+
+    .\gradlew.bat test --tests "com.usersy628.coffeeorder.global.error.GlobalExceptionHandlerTest"
+    .\gradlew.bat test --tests "com.usersy628.coffeeorder.global.trace.TraceIdFilterTest"
+    .\gradlew.bat test --tests "com.usersy628.coffeeorder.point.api.PointChargeApiIntegrationTest"
+    .\gradlew.bat test --tests "com.usersy628.coffeeorder.order.api.OrderApiIntegrationTest"
+    .\gradlew.bat test --no-daemon --rerun-tasks
+    .\gradlew.bat bootJar --no-daemon
+    git diff --check
+
+#### 실제 구현 결과
+
+- `SERVICE_UNAVAILABLE` 오류 코드와 `DataAccessResourceFailureException` 전용 503 handler를 추가했다.
+- handler는 원문 예외 메시지를 응답이나 경고 로그에 남기지 않고, 오류 코드·원인 타입·서버 생성 traceId만 기록한다.
+- `DataIntegrityViolationException`은 광범위하게 409로 변환하지 않으며, 안전한 `INTERNAL_SERVER_ERROR` 응답으로 남는 계약을 테스트했다.
+- 새 503·500 응답의 빈 details, body/header traceId 일치, 민감 문자열 비노출을 회귀 테스트로 고정했다.
+
+#### 계획 대비 변경
+
+- 없음
+
+#### 실제 검증 결과
+
+| 검증 명령 또는 확인 | 결과 |
+| --- | --- |
+| GlobalExceptionHandlerTest (구현 전) | 의도한 red: 13개 중 1개 실패. 기존 handler가 503 기대를 500으로 처리함을 확인 |
+| GlobalExceptionHandlerTest (구현 후) | 13개 테스트 성공 |
+| TraceIdFilterTest | 성공 |
+| PointChargeApiIntegrationTest와 OrderApiIntegrationTest 대상 실행 | 성공 |
+| test --no-daemon --rerun-tasks | JUnit XML 최종 집계 105개, 실패 0, 오류 0 |
+| bootJar --no-daemon | 성공 |
+| git diff --check | 성공 |
+| gh pr view 33 --json title,body,url | 한글 제목·본문과 예상하지 않은 리터럴 ? 손실이 없음을 확인 |
+
 ### [DOC-02](https://github.com/usersy628/coffee-order-system/issues/31) PR lifecycle와 문서 상태의 기준 분리
 
 - 기록 유형: PR_SUBMISSION

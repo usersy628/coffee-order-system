@@ -19,6 +19,7 @@ public enum ErrorCode {
 	INSUFFICIENT_POINTS(HttpStatus.CONFLICT, "포인트 잔액이 부족합니다."),
 	IDEMPOTENCY_KEY_REUSED(HttpStatus.CONFLICT, "같은 Idempotency-Key를 다른 요청에 사용할 수 없습니다."),
 	CONCURRENT_REQUEST_TIMEOUT(HttpStatus.SERVICE_UNAVAILABLE, "동시 요청 처리에 실패했습니다. 같은 Idempotency-Key로 다시 시도해 주세요."),
+	SERVICE_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "일시적인 인프라 오류가 발생했습니다. 잠시 후 다시 시도해 주세요."),
 	INTERNAL_SERVER_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "서버 내부 오류가 발생했습니다.");
 
 	private final HttpStatus httpStatus;

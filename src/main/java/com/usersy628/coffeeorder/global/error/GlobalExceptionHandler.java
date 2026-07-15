@@ -12,6 +12,7 @@ import com.usersy628.coffeeorder.point.application.PointChargeRetryFailureExcept
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
+import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.HttpMediaTypeNotSupportedException;
@@ -190,6 +191,23 @@ public class GlobalExceptionHandler {
 		ErrorCode errorCode = ErrorCode.ENDPOINT_NOT_FOUND;
 		String traceId = currentTraceId();
 		log.info("Handled missing endpoint traceId={}", traceId);
+
+		return ResponseEntity.status(errorCode.getHttpStatus())
+			.body(ApiErrorResponse.from(errorCode, Map.of(), traceId));
+	}
+
+	@ExceptionHandler(DataAccessResourceFailureException.class)
+	public ResponseEntity<ApiErrorResponse> handleInfrastructureUnavailable(
+		DataAccessResourceFailureException exception
+	) {
+		ErrorCode errorCode = ErrorCode.SERVICE_UNAVAILABLE;
+		String traceId = currentTraceId();
+		log.warn(
+			"Transient infrastructure error code={} causeType={} traceId={}",
+			errorCode.name(),
+			exception.getClass().getSimpleName(),
+			traceId
+		);
 
 		return ResponseEntity.status(errorCode.getHttpStatus())
 			.body(ApiErrorResponse.from(errorCode, Map.of(), traceId));
